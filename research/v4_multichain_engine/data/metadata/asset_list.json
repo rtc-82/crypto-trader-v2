@@ -1,0 +1,50 @@
+{
+  "base_path": "data/raw/5m",
+  "assets": {
+
+    "BTCUSDT": { "tier": "core", "enabled": true },
+    "ETHUSDT": { "tier": "core", "enabled": true },
+    "SOLUSDT": { "tier": "core", "enabled": true },
+    "BNBUSDT": { "tier": "core", "enabled": true },
+    "AVAXUSDT": { "tier": "core", "enabled": true },
+    "DOGEUSDT": { "tier": "core", "enabled": true },
+    "LINKUSDT": { "tier": "core", "enabled": true },
+    "MATICUSDT": { "tier": "core", "enabled": true },
+    "NEARUSDT": { "tier": "core", "enabled": true },
+    "XRPUSDT": { "tier": "core", "enabled": true },
+    "ADAUSDT": { "tier": "core", "enabled": true },
+
+    "AAVEUSDT": { "tier": "tier1", "enabled": true },
+    "APTUSDT": { "tier": "tier1", "enabled": true },
+    "ARBUSDT": { "tier": "tier1", "enabled": true },
+   
+    "FTMUSDT": { "tier": "tier1", "enabled": true },
+    "GRTUSDT": { "tier": "tier1", "enabled": true },
+    "IMXUSDT": { "tier": "tier1", "enabled": true },
+    "INJUSDT": { "tier": "tier1", "enabled": true },
+    "LDOUSDT": { "tier": "tier1", "enabled": true },
+    "OPUSDT": { "tier": "tier1", "enabled": true },
+    "PEPEUSDT": { "tier": "tier1", "enabled": true },
+    "RNDRUSDT": { "tier": "tier1", "enabled": true },
+    "SEIUSDT": { "tier": "tier1", "enabled": true },
+    "SUIUSDT": { "tier": "tier1", "enabled": true },
+    "TIAUSDT": { "tier": "tier1", "enabled": true },
+    "TONUSDT": { "tier": "tier1", "enabled": true },
+
+    "CFXUSDT": { "tier": "tier2", "enabled": true },
+    "CHZUSDT": { "tier": "tier2", "enabled": true },
+    "COMPUSDT": { "tier": "tier2", "enabled": true },
+    "DYDXUSDT": { "tier": "tier2", "enabled": true },
+    "FLOWUSDT": { "tier": "tier2", "enabled": true },
+    "GMTUSDT": { "tier": "tier2", "enabled": true },
+    "MANAUSDT": { "tier": "tier2", "enabled": true },
+    "NEOUSDT": { "tier": "tier2", "enabled": true },
+    "RUNEUSDT": { "tier": "tier2", "enabled": true },
+    "SANDUSDT": { "tier": "tier2", "enabled": true },
+    "STXUSDT": { "tier": "tier2", "enabled": true },
+    "SUSHIUSDT": { "tier": "tier2", "enabled": true },
+    "UNIUSDT": { "tier": "tier2", "enabled": true },
+    "XLMUSDT": { "tier": "tier2", "enabled": true }
+
+  }
+}

@@ -1,0 +1,10 @@
+numpy
+pandas
+requests
+httpx
+python-dotenv
+web3
+eth-account
+eth-abi
+solana
+aiohttp

@@ -1,0 +1,4 @@
+
+cd C:\Users\r-cun\Desktop\sniper_crypto
+
+python -m v4_multichain_engine.main
