@@ -1,7 +1,7 @@
 # execution/live_executor_adapter.py
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from research.v4_multichain_engine.models.signal import Signal
 from research.v4_multichain_engine.execution.abstract_executor import AbstractExecutor  # :contentReference[oaicite:5]{index=5}

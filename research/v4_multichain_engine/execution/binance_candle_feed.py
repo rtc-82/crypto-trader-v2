@@ -1,7 +1,6 @@
 # execution/binance_candle_feed.py
 
 import httpx
-import asyncio
 from datetime import datetime, timezone
 
 

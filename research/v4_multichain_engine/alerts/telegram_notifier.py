@@ -1,8 +1,6 @@
 # research/v4_multichain_engine/alerts/telegram_notifier.py
 
 import httpx
-import asyncio
-from typing import Optional
 
 
 class TelegramNotifier:

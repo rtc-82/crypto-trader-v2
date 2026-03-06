@@ -84,6 +84,13 @@ ENGINE_CONFIG = {
 
     "score_lookback_trades": 120,
 
+    # ======================================================
+    # PORTFOLIO CIRCUIT BREAKER
+    # ======================================================
+
+    "portfolio_circuit_breaker_dd": 0.10,   # stop trading at 10% drawdown
+    "circuit_breaker_cooldown_minutes": 240,
+
     # =========================================
     # POSITION LIMITS
     # =========================================

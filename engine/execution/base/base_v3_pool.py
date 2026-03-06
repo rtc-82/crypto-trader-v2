@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from web3 import Web3
 import logging
-import math
 
 
 UNISWAP_V3_FACTORY = Web3.to_checksum_address(

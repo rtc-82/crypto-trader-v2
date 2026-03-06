@@ -1,7 +1,6 @@
 # sniper_crypto/v4_multichain_engine/execution/solana_executor.py
 
 import random
-import math
 
 
 class SolanaExecutor:

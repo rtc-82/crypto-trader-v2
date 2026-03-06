@@ -1,5 +1,4 @@
 import aiohttp
-import asyncio
 
 
 class BinanceCandleFeed:

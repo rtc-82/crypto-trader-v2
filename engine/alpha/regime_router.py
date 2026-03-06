@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 from engine.core.signal import Signal
 from engine.alpha.market_regime_engine import MarketRegimeEngine, RegimeResult

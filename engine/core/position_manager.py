@@ -49,6 +49,10 @@ class PositionManager:
 
         return list(self.positions.values())
 
+    def get_position(self, symbol: str) -> Optional[Position]:
+
+        return self.positions.get(symbol)
+
     # ------------------------------------------------
     # OPEN POSITION
     # ------------------------------------------------
@@ -135,26 +139,20 @@ class PositionManager:
         if p.direction == "LONG":
 
             if low <= p.stop_loss:
-
                 exit_price = p.stop_loss
-                self.close_position(symbol)
-
                 return {
                     "result": "STOP",
-                    "exit_price": exit_price,
+                    "exit_price": float(exit_price),
                     "position": p,
                 }
 
         else:
 
             if high >= p.stop_loss:
-
                 exit_price = p.stop_loss
-                self.close_position(symbol)
-
                 return {
                     "result": "STOP",
-                    "exit_price": exit_price,
+                    "exit_price": float(exit_price),
                     "position": p,
                 }
 
