@@ -77,7 +77,11 @@ class MultiChainOrchestrator:
 
         self.attribution = TradeAttribution()
 
-        self.router = RegimeRouter(trend_config=STRATEGY_CONFIG)
+        # one independent router per symbol to avoid cross-symbol state contamination
+        self.routers: Dict[str, RegimeRouter] = {
+            s: RegimeRouter(trend_config=STRATEGY_CONFIG)
+            for s in self.symbols
+        }
 
         self.signal_strength = SignalStrength()
         self.vol_scaler = VolatilityScaler()
@@ -620,7 +624,7 @@ class MultiChainOrchestrator:
 
                 price = candle["close"]
 
-                out = self.router.on_candle(
+                out = self.routers[symbol].on_candle(
                     price,
                     candle["high"],
                     candle["low"],
