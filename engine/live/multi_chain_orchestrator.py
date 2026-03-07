@@ -278,6 +278,53 @@ class MultiChainOrchestrator:
             except Exception as e:
                 logger.error(f"[RECOVERY] failed to restore position for {symbol}: {e}")
 
+    def _log_exit_state(
+        self,
+        symbol: str,
+        candle: Dict[str, Any],
+        pre_snapshot: Optional[Dict[str, Any]],
+        exit_decision: Optional[Dict[str, Any]],
+        open_chains: List[str],
+    ) -> None:
+
+        if not pre_snapshot:
+            return
+
+        high = self._safe_float(candle.get("high"), 0.0)
+        low = self._safe_float(candle.get("low"), 0.0)
+        close = self._safe_float(candle.get("close"), 0.0)
+
+        if exit_decision and isinstance(exit_decision, dict):
+            diag = exit_decision.get("diagnostic", {})
+            logger.info(
+                "[EXIT CHECK] "
+                f"symbol={symbol} "
+                f"direction={pre_snapshot.get('direction')} "
+                f"entry={pre_snapshot.get('entry_price')} "
+                f"atr={pre_snapshot.get('atr')} "
+                f"best_pre={diag.get('pre_best_price', pre_snapshot.get('best_price'))} "
+                f"best_post={diag.get('post_best_price', pre_snapshot.get('best_price'))} "
+                f"stop_pre={diag.get('pre_stop_loss', pre_snapshot.get('stop_loss'))} "
+                f"stop_post={diag.get('post_stop_loss', pre_snapshot.get('stop_loss'))} "
+                f"high={high} low={low} close={close} "
+                f"chains={open_chains} "
+                f"triggered=True result={exit_decision.get('result')} "
+                f"exit_price={exit_decision.get('exit_price')}"
+            )
+        else:
+            logger.info(
+                "[EXIT CHECK] "
+                f"symbol={symbol} "
+                f"direction={pre_snapshot.get('direction')} "
+                f"entry={pre_snapshot.get('entry_price')} "
+                f"atr={pre_snapshot.get('atr')} "
+                f"best={pre_snapshot.get('best_price')} "
+                f"stop={pre_snapshot.get('stop_loss')} "
+                f"high={high} low={low} close={close} "
+                f"chains={open_chains} "
+                f"triggered=False"
+            )
+
     def send_telegram(self, message):
 
         if not self.telegram_token:
@@ -410,6 +457,9 @@ class MultiChainOrchestrator:
             if not candle:
                 continue
 
+            pre_snapshot = self.position_manager.diagnostic_snapshot(symbol)
+            open_chains = self._get_open_chains_for_symbol(symbol)
+
             try:
                 exit_decision = self.position_manager.check_exit(
                     symbol=symbol,
@@ -419,6 +469,14 @@ class MultiChainOrchestrator:
             except Exception as e:
                 logger.error(f"[EXIT CHECK ERROR] {symbol}: {e}")
                 continue
+
+            self._log_exit_state(
+                symbol=symbol,
+                candle=candle,
+                pre_snapshot=pre_snapshot,
+                exit_decision=exit_decision,
+                open_chains=open_chains,
+            )
 
             if not exit_decision:
                 continue

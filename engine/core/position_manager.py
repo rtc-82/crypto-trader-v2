@@ -53,6 +53,25 @@ class PositionManager:
 
         return self.positions.get(symbol)
 
+    def diagnostic_snapshot(self, symbol: str):
+
+        p = self.positions.get(symbol)
+
+        if p is None:
+            return None
+
+        return {
+            "symbol": p.symbol,
+            "direction": p.direction,
+            "entry_price": float(p.entry_price),
+            "size": float(p.size),
+            "atr": float(p.atr),
+            "trailing_atr_mult": float(p.trailing_atr_mult),
+            "best_price": float(p.best_price),
+            "stop_loss": float(p.stop_loss),
+            "entry_ts": int(p.entry_ts),
+        }
+
     # ------------------------------------------------
     # OPEN POSITION
     # ------------------------------------------------
@@ -134,7 +153,28 @@ class PositionManager:
         if p is None:
             return None
 
+        pre_stop_loss = float(p.stop_loss)
+        pre_best_price = float(p.best_price)
+
         self._update_trailing_stop(p, high, low)
+
+        post_stop_loss = float(p.stop_loss)
+        post_best_price = float(p.best_price)
+
+        diagnostic = {
+            "symbol": p.symbol,
+            "direction": p.direction,
+            "entry_price": float(p.entry_price),
+            "size": float(p.size),
+            "atr": float(p.atr),
+            "trailing_atr_mult": float(p.trailing_atr_mult),
+            "high": float(high),
+            "low": float(low),
+            "pre_stop_loss": pre_stop_loss,
+            "post_stop_loss": post_stop_loss,
+            "pre_best_price": pre_best_price,
+            "post_best_price": post_best_price,
+        }
 
         if p.direction == "LONG":
 
@@ -144,6 +184,7 @@ class PositionManager:
                     "result": "STOP",
                     "exit_price": float(exit_price),
                     "position": p,
+                    "diagnostic": diagnostic,
                 }
 
         else:
@@ -154,6 +195,7 @@ class PositionManager:
                     "result": "STOP",
                     "exit_price": float(exit_price),
                     "position": p,
+                    "diagnostic": diagnostic,
                 }
 
         return None
