@@ -154,6 +154,10 @@ class MultiChainOrchestrator:
 
         self._global_risk_reset_day: Optional[str] = None
 
+        # entry diagnostics
+        self._entry_debug_enabled = True
+        self._entry_skip_reasons: Dict[str, int] = {}
+
         self._restore_open_trade_state()
 
     # ------------------------------------------------
@@ -324,6 +328,27 @@ class MultiChainOrchestrator:
                 f"chains={open_chains} "
                 f"triggered=False"
             )
+
+    def _log_entry_skip(self, symbol: str, reason: str, extra: Optional[str] = None) -> None:
+        self._entry_skip_reasons[reason] = self._entry_skip_reasons.get(reason, 0) + 1
+
+        if not self._entry_debug_enabled:
+            return
+
+        if extra:
+            logger.info(f"[ENTRY SKIP] symbol={symbol} reason={reason} {extra}")
+        else:
+            logger.info(f"[ENTRY SKIP] symbol={symbol} reason={reason}")
+
+    def _flush_entry_skip_summary(self) -> None:
+        if not self._entry_skip_reasons:
+            return
+
+        summary = ", ".join(
+            f"{reason}={count}" for reason, count in sorted(self._entry_skip_reasons.items())
+        )
+        logger.info(f"[ENTRY SUMMARY] {summary}")
+        self._entry_skip_reasons = {}
 
     def send_telegram(self, message):
 
@@ -656,28 +681,37 @@ class MultiChainOrchestrator:
                 logger.info(f"[UNIVERSE REFRESH] {self.active_universe}")
 
             candidates = []
+            self._entry_skip_reasons = {}
 
             for symbol, candle in candle_results:
 
                 if not candle:
+                    self._log_entry_skip(symbol, "no_candle")
                     continue
 
                 if symbol not in newly_closed_symbols:
+                    self._log_entry_skip(symbol, "not_newly_closed")
                     continue
 
                 if symbol not in self.active_universe:
+                    self._log_entry_skip(symbol, "not_in_active_universe")
                     continue
 
                 if symbol in self.position_manager.open_symbols():
+                    self._log_entry_skip(symbol, "already_open")
                     continue
 
                 if not self.position_manager.can_open_new():
+                    self._log_entry_skip(symbol, "max_positions_reached")
                     break
 
                 if symbol in self.cooldown and time.time() - self.cooldown[symbol] < self.cooldown_seconds:
+                    remaining = self.cooldown_seconds - (time.time() - self.cooldown[symbol])
+                    self._log_entry_skip(symbol, "cooldown", f"remaining_sec={remaining:.2f}")
                     continue
 
                 if not self._is_liquid(symbol):
+                    self._log_entry_skip(symbol, "liquidity_block")
                     continue
 
                 price = candle["close"]
@@ -703,8 +737,12 @@ class MultiChainOrchestrator:
                         "signal": out.signal,
                         "price": price
                     })
+                else:
+                    self._log_entry_skip(symbol, "no_signal")
 
             if not candidates:
+                self._flush_entry_skip_summary()
+                logger.info("[SCAN] no candidates produced this loop")
                 await asyncio.sleep(self.loop_interval)
                 continue
 
@@ -715,6 +753,8 @@ class MultiChainOrchestrator:
             )
 
             if not best:
+                self._flush_entry_skip_summary()
+                logger.info(f"[SCAN] candidates={len(candidates)} but ranker returned no selection")
                 await asyncio.sleep(self.loop_interval)
                 continue
 
@@ -747,6 +787,7 @@ class MultiChainOrchestrator:
             )
 
             if not decision.allowed:
+                self._flush_entry_skip_summary()
                 logger.warning(f"[GLOBAL RISK BLOCK] {decision.reason}")
                 await asyncio.sleep(self.loop_interval)
                 continue
@@ -759,6 +800,7 @@ class MultiChainOrchestrator:
             ]
 
             if not executable_chains:
+                self._flush_entry_skip_summary()
                 logger.warning(f"[NO EXECUTION ROUTE] {symbol}")
                 await asyncio.sleep(self.loop_interval)
                 continue
@@ -847,6 +889,8 @@ class MultiChainOrchestrator:
                     entry_ts=entry_ts
                 )
 
+                self._flush_entry_skip_summary()
+
                 logger.info(
                     f"[TRADE OPENED] symbol={symbol} direction={direction} "
                     f"price={price} size={total_executed_size} "
@@ -857,6 +901,12 @@ class MultiChainOrchestrator:
                 self.send_telegram(
                     f"🚀 Trade Opened {symbol} {direction} size={total_executed_size} "
                     f"chains={','.join(chain for chain, _, _ in successful_legs)}"
+                )
+            else:
+                self._flush_entry_skip_summary()
+                logger.warning(
+                    f"[EXECUTION FAILED] symbol={symbol} direction={direction} "
+                    f"chains={executable_chains} failed_chains={failed_chains}"
                 )
 
             await asyncio.sleep(self.loop_interval)
