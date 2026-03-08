@@ -135,7 +135,10 @@ class MarketRegimeEngine:
                 meta=base_meta,
             )
 
-        if len(self._atr_hist) < 100:
+        min_atr_history = 5
+        base_meta["min_atr_history"] = min_atr_history
+
+        if len(self._atr_hist) < min_atr_history:
             return RegimeResult(
                 regime="NEUTRAL",
                 atr=self._atr,
@@ -144,6 +147,7 @@ class MarketRegimeEngine:
                 reason="atr_history_warmup",
                 meta=base_meta,
             )
+            
 
         if len(self._ema_hist) < (self.slope_lookback + 2):
             return RegimeResult(
