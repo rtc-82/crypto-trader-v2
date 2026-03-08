@@ -240,7 +240,7 @@ UNIVERSE_CONFIG = {
     "refresh_interval_minutes": 240,
 
     # how many symbols to trade
-    "universe_size": 12,
+    "universe_size": 20,
 }
 
 # ============================================================
