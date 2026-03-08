@@ -12,13 +12,13 @@ STRATEGY_CONFIG = {
 
     "atr_period": 14,
 
-    "slope_threshold": 0.2,
+    "slope_threshold": 0.12,
 
-    "volatility_percentile_threshold": 0.6,
+    "volatility_percentile_threshold": 0.45,
 
     "adx_threshold": 30,
 
-    "breakout_lookback": 20,
+    "breakout_lookback": 12,
 }
 
 # ============================================================
@@ -240,7 +240,7 @@ UNIVERSE_CONFIG = {
     "refresh_interval_minutes": 240,
 
     # how many symbols to trade
-    "universe_size": 8,
+    "universe_size": 12,
 }
 
 # ============================================================
