@@ -44,6 +44,17 @@ class MeanReversionStrategy:
         self._atr_hist: Deque[float] = deque(maxlen=3000)
         self._atr: Optional[float] = None
 
+    def _decision(
+        self,
+        signal: Optional[Signal],
+        reason: Optional[str],
+        base_meta: dict[str, Any],
+        **extra_meta: Any,
+    ) -> StrategyDecision:
+        meta = dict(base_meta)
+        meta.update(extra_meta)
+        return StrategyDecision(signal=signal, reason=reason, meta=meta)
+
     def _update_atr(self, close: float, high: float, low: float) -> Optional[float]:
         if self._prev_close is None:
             self._prev_close = close
@@ -53,106 +64,199 @@ class MeanReversionStrategy:
         tr2 = abs(high - self._prev_close)
         tr3 = abs(low - self._prev_close)
         tr = max(tr1, tr2, tr3)
+
+        if not np.isfinite(tr):
+            self._prev_close = close
+            return None
+
         self._tr_q.append(float(tr))
 
         if len(self._tr_q) < self.cfg.atr_period:
             self._prev_close = close
             return None
 
-        self._atr = float(np.mean(self._tr_q))
+        atr = float(np.mean(self._tr_q))
+        if not np.isfinite(atr):
+            self._prev_close = close
+            return None
+
+        self._atr = atr
         self._atr_hist.append(self._atr)
         self._prev_close = close
         return self._atr
 
     def on_candle(self, close: float, high: float, low: float, timestamp=None) -> StrategyDecision:
-        self._closes.append(float(close))
-        atr = self._update_atr(close, high, low)
+        close = float(close)
+        high = float(high)
+        low = float(low)
 
         base_meta = {
-            "close": float(close),
-            "high": float(high),
-            "low": float(low),
+            "close": close,
+            "high": high,
+            "low": low,
             "bb_period": int(self.cfg.bb_period),
             "atr_period": int(self.cfg.atr_period),
             "z_entry": float(self.cfg.z_entry),
+            "z_exit": float(self.cfg.z_exit),
             "min_atr_history": int(self.cfg.min_atr_history),
             "max_atr_percentile_for_mr": float(self.cfg.max_atr_percentile_for_mr),
             "close_history_len": len(self._closes),
             "atr_history_len": len(self._atr_hist),
-            "atr": float(atr) if atr is not None else None,
+            "atr": float(self._atr) if self._atr is not None else None,
+            "timestamp": timestamp,
         }
 
+        if not (np.isfinite(close) and np.isfinite(high) and np.isfinite(low)):
+            return self._decision(
+                signal=None,
+                reason="non_finite_ohlc",
+                base_meta=base_meta,
+            )
+
+        if high < low:
+            return self._decision(
+                signal=None,
+                reason="invalid_ohlc_range",
+                base_meta=base_meta,
+            )
+
+        self._closes.append(close)
+        atr = self._update_atr(close, high, low)
+
+        base_meta["close_history_len"] = len(self._closes)
+        base_meta["atr_history_len"] = len(self._atr_hist)
+        base_meta["atr"] = float(atr) if atr is not None else None
+
         if len(self._closes) < self.cfg.bb_period:
-            return StrategyDecision(
+            return self._decision(
                 signal=None,
                 reason="insufficient_close_history",
-                meta=base_meta,
+                base_meta=base_meta,
             )
 
         if atr is None:
-            return StrategyDecision(
+            return self._decision(
                 signal=None,
                 reason="atr_not_ready",
-                meta=base_meta,
+                base_meta=base_meta,
+            )
+
+        if not np.isfinite(atr):
+            return self._decision(
+                signal=None,
+                reason="atr_non_finite",
+                base_meta=base_meta,
             )
 
         if atr <= 0:
-            return StrategyDecision(
+            return self._decision(
                 signal=None,
                 reason="atr_non_positive",
-                meta=base_meta,
+                base_meta=base_meta,
             )
 
         if len(self._atr_hist) < self.cfg.min_atr_history:
-            return StrategyDecision(
+            return self._decision(
                 signal=None,
                 reason="insufficient_atr_history",
-                meta=base_meta,
+                base_meta=base_meta,
             )
 
         atr_arr = np.array(self._atr_hist, dtype=float)
+        if atr_arr.size == 0 or not np.all(np.isfinite(atr_arr)):
+            return self._decision(
+                signal=None,
+                reason="invalid_atr_history",
+                base_meta=base_meta,
+            )
+
         atr_pct = float(np.mean(atr_arr < atr))
-        base_meta["atr_percentile"] = atr_pct
+
+        if not np.isfinite(atr_pct):
+            return self._decision(
+                signal=None,
+                reason="atr_percentile_invalid",
+                base_meta=base_meta,
+            )
 
         if atr_pct > self.cfg.max_atr_percentile_for_mr:
-            return StrategyDecision(
+            return self._decision(
                 signal=None,
                 reason="atr_percentile_too_high",
-                meta=base_meta,
+                base_meta=base_meta,
+                atr_percentile=atr_pct,
             )
 
         arr = np.array(self._closes, dtype=float)
+        if arr.size < self.cfg.bb_period or not np.all(np.isfinite(arr)):
+            return self._decision(
+                signal=None,
+                reason="invalid_close_history",
+                base_meta=base_meta,
+                atr_percentile=atr_pct,
+            )
+
         mean = float(arr.mean())
         std = float(arr.std(ddof=0))
-        base_meta["mean"] = mean
-        base_meta["std"] = std
+
+        if not np.isfinite(mean) or not np.isfinite(std):
+            return self._decision(
+                signal=None,
+                reason="mean_or_std_non_finite",
+                base_meta=base_meta,
+                atr_percentile=atr_pct,
+            )
 
         if std <= 0:
-            return StrategyDecision(
+            return self._decision(
                 signal=None,
                 reason="std_non_positive",
-                meta=base_meta,
+                base_meta=base_meta,
+                atr_percentile=atr_pct,
+                mean=mean,
+                std=std,
             )
 
         z = float((close - mean) / std)
-        base_meta["zscore"] = z
+
+        if not np.isfinite(z):
+            return self._decision(
+                signal=None,
+                reason="zscore_non_finite",
+                base_meta=base_meta,
+                atr_percentile=atr_pct,
+                mean=mean,
+                std=std,
+            )
 
         if z >= self.cfg.z_entry:
-            return StrategyDecision(
+            return self._decision(
                 signal=Signal(direction="SHORT", atr=float(atr)),
                 reason=None,
-                meta=base_meta,
+                base_meta=base_meta,
+                atr_percentile=atr_pct,
+                mean=mean,
+                std=std,
+                zscore=z,
             )
 
         if z <= -self.cfg.z_entry:
-            return StrategyDecision(
+            return self._decision(
                 signal=Signal(direction="LONG", atr=float(atr)),
                 reason=None,
-                meta=base_meta,
+                base_meta=base_meta,
+                atr_percentile=atr_pct,
+                mean=mean,
+                std=std,
+                zscore=z,
             )
 
-        return StrategyDecision(
+        return self._decision(
             signal=None,
             reason="zscore_not_extreme_enough",
-            meta=base_meta,
+            base_meta=base_meta,
+            atr_percentile=atr_pct,
+            mean=mean,
+            std=std,
+            zscore=z,
         )

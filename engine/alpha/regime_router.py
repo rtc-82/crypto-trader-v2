@@ -55,27 +55,56 @@ class RegimeRouter:
         }
 
         regime_meta_dict = getattr(regime_meta, "meta", {}) or {}
+        regime_reason = getattr(regime_meta, "reason", None)
 
         if regime == "TRENDING":
             decision = self.trend.on_candle(close, high, low, timestamp)
+
+            if decision is None:
+                return RouterOutput(
+                    regime=regime,
+                    regime_meta=regime_meta,
+                    signal=None,
+                    strategy_used="trend",
+                    reason=regime_reason or "strategy_returned_none",
+                    meta={**shared_meta, **regime_meta_dict},
+                )
+
+            decision_reason = getattr(decision, "reason", None)
+            decision_meta = getattr(decision, "meta", {}) or {}
+
             return RouterOutput(
                 regime=regime,
                 regime_meta=regime_meta,
-                signal=decision.signal,
+                signal=getattr(decision, "signal", None),
                 strategy_used="trend",
-                reason=decision.reason or getattr(regime_meta, "reason", None),
-                meta={**shared_meta, **regime_meta_dict, **decision.meta},
+                reason=decision_reason or regime_reason,
+                meta={**shared_meta, **regime_meta_dict, **decision_meta},
             )
 
         if regime == "COMPRESSION":
             decision = self.mean_rev.on_candle(close, high, low, timestamp)
+
+            if decision is None:
+                return RouterOutput(
+                    regime=regime,
+                    regime_meta=regime_meta,
+                    signal=None,
+                    strategy_used="mean_reversion",
+                    reason=regime_reason or "strategy_returned_none",
+                    meta={**shared_meta, **regime_meta_dict},
+                )
+
+            decision_reason = getattr(decision, "reason", None)
+            decision_meta = getattr(decision, "meta", {}) or {}
+
             return RouterOutput(
                 regime=regime,
                 regime_meta=regime_meta,
-                signal=decision.signal,
+                signal=getattr(decision, "signal", None),
                 strategy_used="mean_reversion",
-                reason=decision.reason or getattr(regime_meta, "reason", None),
-                meta={**shared_meta, **regime_meta_dict, **decision.meta},
+                reason=decision_reason or regime_reason,
+                meta={**shared_meta, **regime_meta_dict, **decision_meta},
             )
 
         return RouterOutput(
@@ -83,6 +112,6 @@ class RegimeRouter:
             regime_meta=regime_meta,
             signal=None,
             strategy_used="none",
-            reason=getattr(regime_meta, "reason", None) or "regime_neutral",
+            reason=regime_reason or "regime_neutral",
             meta={**shared_meta, **regime_meta_dict},
         )
