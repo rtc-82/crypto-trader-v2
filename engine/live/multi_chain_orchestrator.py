@@ -334,9 +334,13 @@ class MultiChainOrchestrator:
             )
 
     def _log_entry_skip(self, symbol: str, reason: str, extra: Optional[str] = None) -> None:
-        self._entry_skip_reasons[reason] = self._entry_skip_reasons.get(reason, 0) + 1
+        if reason != "not_newly_closed":
+            self._entry_skip_reasons[reason] = self._entry_skip_reasons.get(reason, 0) + 1
 
         if not self._entry_debug_enabled:
+            return
+
+        if reason == "not_newly_closed":
             return
 
         if extra:
