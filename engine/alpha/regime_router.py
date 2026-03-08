@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Any, Optional
 
 from engine.core.signal import Signal
 from engine.alpha.market_regime_engine import MarketRegimeEngine, RegimeResult
@@ -15,14 +15,17 @@ class RouterOutput:
     regime_meta: RegimeResult
     signal: Optional[Signal]
     strategy_used: str  # "trend" | "mean_reversion" | "none"
+    reason: Optional[str] = None
+    meta: dict[str, Any] = field(default_factory=dict)
 
 
 class RegimeRouter:
     """
-    Option B:
-      TRENDING -> TrendStrategy
-      COMPRESSION -> MeanReversionStrategy
-      NEUTRAL -> no signal (default)
+    TRENDING -> TrendStrategy
+    COMPRESSION -> MeanReversionStrategy
+    NEUTRAL -> no signal
+
+    Returns RouterOutput with signal + reason + metadata for diagnostics.
     """
 
     def __init__(
@@ -43,13 +46,41 @@ class RegimeRouter:
     def on_candle(self, close: float, high: float, low: float, timestamp=None) -> RouterOutput:
         regime_meta = self.regime_engine.update(close, high, low)
         regime = regime_meta.regime
+        self.last_regime = regime
+
+        shared_meta = {
+            "close": float(close),
+            "high": float(high),
+            "low": float(low),
+        }
 
         if regime == "TRENDING":
-            sig = self.trend.on_candle(close, high, low, timestamp)
-            return RouterOutput(regime, regime_meta, sig, "trend")
+            decision = self.trend.on_candle(close, high, low, timestamp)
+            return RouterOutput(
+                regime=regime,
+                regime_meta=regime_meta,
+                signal=decision.signal,
+                strategy_used="trend",
+                reason=decision.reason,
+                meta={**shared_meta, **decision.meta},
+            )
 
         if regime == "COMPRESSION":
-            sig = self.mean_rev.on_candle(close, high, low, timestamp)
-            return RouterOutput(regime, regime_meta, sig, "mean_reversion")
+            decision = self.mean_rev.on_candle(close, high, low, timestamp)
+            return RouterOutput(
+                regime=regime,
+                regime_meta=regime_meta,
+                signal=decision.signal,
+                strategy_used="mean_reversion",
+                reason=decision.reason,
+                meta={**shared_meta, **decision.meta},
+            )
 
-        return RouterOutput(regime, regime_meta, None, "none")
+        return RouterOutput(
+            regime=regime,
+            regime_meta=regime_meta,
+            signal=None,
+            strategy_used="none",
+            reason="regime_neutral",
+            meta=shared_meta,
+        )

@@ -158,6 +158,10 @@ class MultiChainOrchestrator:
         self._entry_debug_enabled = True
         self._entry_skip_reasons: Dict[str, int] = {}
 
+        # strategy diagnostics
+        self._strategy_debug_enabled = True
+        self._strategy_debug_log_signals = True
+
         self._restore_open_trade_state()
 
     # ------------------------------------------------
@@ -349,6 +353,111 @@ class MultiChainOrchestrator:
         )
         logger.info(f"[ENTRY SUMMARY] {summary}")
         self._entry_skip_reasons = {}
+
+    def _compact_meta(self, meta: Any) -> str:
+        if not isinstance(meta, dict) or not meta:
+            return ""
+
+        preferred_keys = [
+            "close",
+            "price",
+            "high",
+            "low",
+            "atr",
+            "atr_percentile",
+            "zscore",
+            "mean",
+            "std",
+            "close_history_len",
+            "atr_history_len",
+            "bb_period",
+            "atr_period",
+            "z_entry",
+            "max_atr_percentile_for_mr",
+            "slope_norm",
+            "slope_threshold",
+            "vol_percentile",
+            "vol_threshold",
+            "breakout_high",
+            "breakout_low",
+        ]
+
+        parts = []
+
+        for key in preferred_keys:
+            if key not in meta:
+                continue
+
+            value = meta.get(key)
+
+            if isinstance(value, float):
+                parts.append(f"{key}={value:.6f}")
+            else:
+                parts.append(f"{key}={value}")
+
+        if not parts:
+            try:
+                for key, value in list(meta.items())[:8]:
+                    if isinstance(value, float):
+                        parts.append(f"{key}={value:.6f}")
+                    else:
+                        parts.append(f"{key}={value}")
+            except Exception:
+                return ""
+
+        return " ".join(parts)
+
+    def _log_strategy_result(self, symbol: str, out: Any) -> None:
+        if not self._strategy_debug_enabled:
+            return
+
+        signal = getattr(out, "signal", None)
+        regime = getattr(out, "regime", None)
+        strategy_used = getattr(out, "strategy_used", None)
+        reason = getattr(out, "reason", None)
+        meta = getattr(out, "meta", None)
+
+        if regime is None and isinstance(out, dict):
+            regime = out.get("regime")
+        if strategy_used is None and isinstance(out, dict):
+            strategy_used = out.get("strategy_used")
+        if reason is None and isinstance(out, dict):
+            reason = out.get("reason")
+        if meta is None and isinstance(out, dict):
+            meta = out.get("meta")
+        if signal is None and isinstance(out, dict):
+            signal = out.get("signal")
+
+        regime = regime or "UNKNOWN"
+        strategy_used = strategy_used or "unknown"
+
+        meta_str = self._compact_meta(meta)
+        meta_suffix = f" {meta_str}" if meta_str else ""
+
+        if signal is None:
+            logger.info(
+                f"[STRATEGY CHECK] symbol={symbol} regime={regime} "
+                f"strategy={strategy_used} result=no_signal reason={reason or 'unknown'}{meta_suffix}"
+            )
+            return
+
+        if not self._strategy_debug_log_signals:
+            return
+
+        direction = getattr(signal, "direction", None)
+        atr = getattr(signal, "atr", None)
+
+        atr_part = ""
+        if atr is not None:
+            try:
+                atr_part = f" atr={float(atr):.6f}"
+            except Exception:
+                atr_part = f" atr={atr}"
+
+        logger.info(
+            f"[STRATEGY CHECK] symbol={symbol} regime={regime} "
+            f"strategy={strategy_used} result=signal direction={direction}{atr_part}{meta_suffix}"
+        )
 
     def send_telegram(self, message):
 
@@ -722,6 +831,8 @@ class MultiChainOrchestrator:
                     candle["low"],
                     candle["close_time"]
                 )
+
+                self._log_strategy_result(symbol, out)
 
                 if out.signal:
 
