@@ -54,6 +54,8 @@ class RegimeRouter:
             "low": float(low),
         }
 
+        regime_meta_dict = getattr(regime_meta, "meta", {}) or {}
+
         if regime == "TRENDING":
             decision = self.trend.on_candle(close, high, low, timestamp)
             return RouterOutput(
@@ -61,8 +63,8 @@ class RegimeRouter:
                 regime_meta=regime_meta,
                 signal=decision.signal,
                 strategy_used="trend",
-                reason=decision.reason,
-                meta={**shared_meta, **decision.meta},
+                reason=decision.reason or getattr(regime_meta, "reason", None),
+                meta={**shared_meta, **regime_meta_dict, **decision.meta},
             )
 
         if regime == "COMPRESSION":
@@ -72,8 +74,8 @@ class RegimeRouter:
                 regime_meta=regime_meta,
                 signal=decision.signal,
                 strategy_used="mean_reversion",
-                reason=decision.reason,
-                meta={**shared_meta, **decision.meta},
+                reason=decision.reason or getattr(regime_meta, "reason", None),
+                meta={**shared_meta, **regime_meta_dict, **decision.meta},
             )
 
         return RouterOutput(
@@ -81,6 +83,6 @@ class RegimeRouter:
             regime_meta=regime_meta,
             signal=None,
             strategy_used="none",
-            reason="regime_neutral",
-            meta=shared_meta,
+            reason=getattr(regime_meta, "reason", None) or "regime_neutral",
+            meta={**shared_meta, **regime_meta_dict},
         )
