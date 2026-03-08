@@ -57,6 +57,10 @@ class RegimeRouter:
         regime_meta_dict = getattr(regime_meta, "meta", {}) or {}
         regime_reason = getattr(regime_meta, "reason", None)
 
+        # Always update mean reversion so its internal history warms up
+        # on every candle, even when COMPRESSION is not the active regime.
+        mr_decision = self.mean_rev.on_candle(close, high, low, timestamp)
+
         if regime == "TRENDING":
             decision = self.trend.on_candle(close, high, low, timestamp)
 
@@ -83,7 +87,7 @@ class RegimeRouter:
             )
 
         if regime == "COMPRESSION":
-            decision = self.mean_rev.on_candle(close, high, low, timestamp)
+            decision = mr_decision
 
             if decision is None:
                 return RouterOutput(
