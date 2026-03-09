@@ -23,7 +23,7 @@ class MRConfig:
     z_exit: float = 0.4
     atr_period: int = 14
     min_atr_history: int = 120
-    max_atr_percentile_for_mr: float = 0.55  # only mean-revert when vol isn't too high
+    max_atr_percentile_for_mr: float = 0.55
 
 
 class MeanReversionStrategy:
@@ -43,6 +43,37 @@ class MeanReversionStrategy:
         self._tr_q: Deque[float] = deque(maxlen=self.cfg.atr_period)
         self._atr_hist: Deque[float] = deque(maxlen=3000)
         self._atr: Optional[float] = None
+
+    def to_snapshot(self) -> dict[str, Any]:
+        return {
+            "closes": list(self._closes),
+            "prev_close": self._prev_close,
+            "tr_q": list(self._tr_q),
+            "atr_hist": list(self._atr_hist),
+            "atr": self._atr,
+        }
+
+    def from_snapshot(self, snap: dict[str, Any]) -> None:
+        if not isinstance(snap, dict):
+            return
+
+        self._closes.clear()
+        for x in snap.get("closes", []):
+            self._closes.append(float(x))
+
+        prev_close = snap.get("prev_close")
+        self._prev_close = float(prev_close) if prev_close is not None else None
+
+        self._tr_q.clear()
+        for x in snap.get("tr_q", []):
+            self._tr_q.append(float(x))
+
+        self._atr_hist.clear()
+        for x in snap.get("atr_hist", []):
+            self._atr_hist.append(float(x))
+
+        atr = snap.get("atr")
+        self._atr = float(atr) if atr is not None else None
 
     def _decision(
         self,

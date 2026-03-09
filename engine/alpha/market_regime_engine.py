@@ -9,7 +9,7 @@ import numpy as np
 
 @dataclass(frozen=True)
 class RegimeResult:
-    regime: str  # "TRENDING" | "COMPRESSION" | "NEUTRAL"
+    regime: str
     atr: Optional[float]
     slope_norm: Optional[float]
     vol_percentile: Optional[float]
@@ -20,16 +20,8 @@ class RegimeResult:
 class MarketRegimeEngine:
     """
     Regime classifier using:
-    - EMA slope normalized by ATR (trend strength)
-    - ATR percentile (volatility context)
-
-    Outputs:
-      TRENDING: strong normalized EMA slope AND volatility not extremely low
-      COMPRESSION: volatility is low (ATR percentile under threshold)
-      NEUTRAL: otherwise
-
-    This version keeps the same architecture but adds structured diagnostics
-    through RegimeResult.reason and RegimeResult.meta.
+    - EMA slope normalized by ATR
+    - ATR percentile
     """
 
     def __init__(
@@ -58,6 +50,41 @@ class MarketRegimeEngine:
         self._atr_hist: Deque[float] = deque(maxlen=atr_history_len)
         self._atr: Optional[float] = None
 
+    def to_snapshot(self) -> dict[str, Any]:
+        return {
+            "ema": self._ema,
+            "ema_hist": list(self._ema_hist),
+            "prev_close": self._prev_close,
+            "tr_q": list(self._tr_q),
+            "atr_hist": list(self._atr_hist),
+            "atr": self._atr,
+        }
+
+    def from_snapshot(self, snap: dict[str, Any]) -> None:
+        if not isinstance(snap, dict):
+            return
+
+        ema = snap.get("ema")
+        self._ema = float(ema) if ema is not None else None
+
+        self._ema_hist.clear()
+        for x in snap.get("ema_hist", []):
+            self._ema_hist.append(float(x))
+
+        prev_close = snap.get("prev_close")
+        self._prev_close = float(prev_close) if prev_close is not None else None
+
+        self._tr_q.clear()
+        for x in snap.get("tr_q", []):
+            self._tr_q.append(float(x))
+
+        self._atr_hist.clear()
+        for x in snap.get("atr_hist", []):
+            self._atr_hist.append(float(x))
+
+        atr = snap.get("atr")
+        self._atr = float(atr) if atr is not None else None
+
     def _base_meta(self, close: float, high: float, low: float) -> dict[str, Any]:
         return {
             "close": float(close),
@@ -77,7 +104,6 @@ class MarketRegimeEngine:
         }
 
     def update(self, close: float, high: float, low: float) -> RegimeResult:
-        # EMA update
         if self._ema is None:
             self._ema = close
         else:
@@ -86,7 +112,6 @@ class MarketRegimeEngine:
 
         base_meta = self._base_meta(close, high, low)
 
-        # ATR update
         if self._prev_close is None:
             self._prev_close = close
             return RegimeResult(
@@ -147,7 +172,6 @@ class MarketRegimeEngine:
                 reason="atr_history_warmup",
                 meta=base_meta,
             )
-            
 
         if len(self._ema_hist) < (self.slope_lookback + 2):
             return RegimeResult(
@@ -159,12 +183,10 @@ class MarketRegimeEngine:
                 meta=base_meta,
             )
 
-        # Normalized slope
         ema_now = self._ema_hist[-1]
         ema_then = self._ema_hist[-1 - self.slope_lookback]
         slope_norm = float((ema_now - ema_then) / self._atr)
 
-        # Vol percentile
         atr_arr = np.array(self._atr_hist, dtype=float)
         vol_pct = float(np.mean(atr_arr < self._atr))
 
@@ -173,7 +195,6 @@ class MarketRegimeEngine:
         base_meta["slope_norm"] = float(slope_norm)
         base_meta["vol_percentile"] = float(vol_pct)
 
-        # Classify
         if vol_pct <= self.compression_vol_percentile:
             return RegimeResult(
                 regime="COMPRESSION",

@@ -14,7 +14,7 @@ class RouterOutput:
     regime: str
     regime_meta: RegimeResult
     signal: Optional[Signal]
-    strategy_used: str  # "trend" | "mean_reversion" | "none"
+    strategy_used: str
     reason: Optional[str] = None
     meta: dict[str, Any] = field(default_factory=dict)
 
@@ -43,6 +43,39 @@ class RegimeRouter:
 
         self.last_regime: Optional[str] = None
 
+    def to_snapshot(self) -> dict[str, Any]:
+        snap: dict[str, Any] = {
+            "last_regime": self.last_regime,
+        }
+
+        if hasattr(self.regime_engine, "to_snapshot"):
+            snap["regime_engine"] = self.regime_engine.to_snapshot()
+
+        trend_engine = getattr(self.trend, "strategy", None)
+        if trend_engine is not None and hasattr(trend_engine, "to_snapshot"):
+            snap["trend_strategy"] = trend_engine.to_snapshot()
+
+        if hasattr(self.mean_rev, "to_snapshot"):
+            snap["mean_reversion"] = self.mean_rev.to_snapshot()
+
+        return snap
+
+    def from_snapshot(self, snap: dict[str, Any]) -> None:
+        if not isinstance(snap, dict):
+            return
+
+        self.last_regime = snap.get("last_regime")
+
+        if "regime_engine" in snap and hasattr(self.regime_engine, "from_snapshot"):
+            self.regime_engine.from_snapshot(snap["regime_engine"])
+
+        trend_engine = getattr(self.trend, "strategy", None)
+        if "trend_strategy" in snap and trend_engine is not None and hasattr(trend_engine, "from_snapshot"):
+            trend_engine.from_snapshot(snap["trend_strategy"])
+
+        if "mean_reversion" in snap and hasattr(self.mean_rev, "from_snapshot"):
+            self.mean_rev.from_snapshot(snap["mean_reversion"])
+
     def on_candle(self, close: float, high: float, low: float, timestamp=None) -> RouterOutput:
         regime_meta = self.regime_engine.update(close, high, low)
         regime = regime_meta.regime
@@ -57,8 +90,6 @@ class RegimeRouter:
         regime_meta_dict = getattr(regime_meta, "meta", {}) or {}
         regime_reason = getattr(regime_meta, "reason", None)
 
-        # Always update mean reversion so its internal history warms up
-        # on every candle, even when COMPRESSION is not the active regime.
         mr_decision = self.mean_rev.on_candle(close, high, low, timestamp)
 
         if regime == "TRENDING":

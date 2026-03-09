@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import time
 import logging
@@ -154,6 +155,8 @@ class MultiChainOrchestrator:
 
         self._global_risk_reset_day: Optional[str] = None
 
+        self.strategy_state_path = os.getenv("STRATEGY_STATE_PATH", "strategy_state.json")
+
         # entry diagnostics
         self._entry_debug_enabled = True
         self._entry_skip_reasons: Dict[str, int] = {}
@@ -163,6 +166,7 @@ class MultiChainOrchestrator:
         self._strategy_debug_log_signals = True
 
         self._restore_open_trade_state()
+        self._load_strategy_state()
 
     # ------------------------------------------------
     # INTERNAL HELPERS
@@ -272,6 +276,55 @@ class MultiChainOrchestrator:
 
         self.global_risk.reset_daily_baseline(self.capital.equity)
         self._global_risk_reset_day = today
+
+    def _save_strategy_state(self) -> None:
+        try:
+            data = {
+                "saved_at": int(time.time()),
+                "last_processed_candle": self.last_processed_candle,
+                "cooldown": self.cooldown,
+                "routers": {},
+            }
+
+            for symbol, router in self.routers.items():
+                if hasattr(router, "to_snapshot"):
+                    data["routers"][symbol] = router.to_snapshot()
+
+            tmp_path = f"{self.strategy_state_path}.tmp"
+
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+
+            os.replace(tmp_path, self.strategy_state_path)
+
+        except Exception as e:
+            logger.error(f"[STATE SAVE ERROR] {e}")
+
+    def _load_strategy_state(self) -> None:
+        if not os.path.exists(self.strategy_state_path):
+            logger.info(f"[STATE LOAD] no strategy state file at {self.strategy_state_path}")
+            return
+
+        try:
+            with open(self.strategy_state_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            self.last_processed_candle = data.get("last_processed_candle", {}) or {}
+            self.cooldown = data.get("cooldown", {}) or {}
+
+            router_snaps = data.get("routers", {}) or {}
+            restored = 0
+
+            for symbol, snap in router_snaps.items():
+                router = self.routers.get(symbol)
+                if router and hasattr(router, "from_snapshot"):
+                    router.from_snapshot(snap)
+                    restored += 1
+
+            logger.info(f"[STATE LOAD] restored strategy state for {restored} symbols")
+
+        except Exception as e:
+            logger.error(f"[STATE LOAD ERROR] {e}")
 
     def _restore_open_trade_state(self) -> None:
         """
@@ -771,313 +824,318 @@ class MultiChainOrchestrator:
 
         self._sync_global_risk_daily_baseline_if_needed()
 
-        while True:
+        try:
+            while True:
 
-            self.capital.daily_reset_if_needed()
-            self._sync_global_risk_daily_baseline_if_needed()
+                self.capital.daily_reset_if_needed()
+                self._sync_global_risk_daily_baseline_if_needed()
 
-            self._reset_circuit_breaker_if_needed()
+                self._reset_circuit_breaker_if_needed()
 
-            candle_results = await asyncio.gather(*[
-                self.fetch_candle(symbol, feed)
-                for symbol, feed in self.feeds.items()
-            ])
+                candle_results = await asyncio.gather(*[
+                    self.fetch_candle(symbol, feed)
+                    for symbol, feed in self.feeds.items()
+                ])
 
-            latest_prices = {}
-            newly_closed_symbols = set()
-            candle_map: Dict[str, Any] = {}
+                latest_prices = {}
+                newly_closed_symbols = set()
+                candle_map: Dict[str, Any] = {}
 
-            for symbol, candle in candle_results:
+                for symbol, candle in candle_results:
 
-                if not candle:
+                    if not candle:
+                        continue
+
+                    close_time = candle["close_time"]
+
+                    if self.last_processed_candle.get(symbol) == close_time:
+                        continue
+
+                    self.last_processed_candle[symbol] = close_time
+                    newly_closed_symbols.add(symbol)
+                    candle_map[symbol] = candle
+
+                    price = candle["close"]
+                    latest_prices[symbol] = price
+
+                    self.price_history.setdefault(symbol, []).append(price)
+
+                    if len(self.price_history[symbol]) > 100:
+                        self.price_history[symbol].pop(0)
+
+                if latest_prices:
+                    self.capital.mark_to_market(latest_prices)
+
+                if candle_map:
+                    await self._process_exits(candle_map, latest_prices)
+                    self._save_strategy_state()
+
+                self.check_portfolio_drawdown()
+
+                if self.circuit_breaker_triggered:
+                    logger.warning("Circuit breaker active")
+                    await asyncio.sleep(self.loop_interval)
                     continue
 
-                close_time = candle["close_time"]
+                now = time.time()
 
-                if self.last_processed_candle.get(symbol) == close_time:
+                if now - self.last_universe_refresh > self.universe_refresh_sec:
+
+                    self.active_universe = self.universe_selector.select(self.price_history) or self.symbols
+                    self.last_universe_refresh = now
+
+                    logger.info(f"[UNIVERSE REFRESH] {self.active_universe}")
+
+                candidates = []
+                self._entry_skip_reasons = {}
+
+                for symbol, candle in candle_results:
+
+                    if not candle:
+                        self._log_entry_skip(symbol, "no_candle")
+                        continue
+
+                    if symbol not in newly_closed_symbols:
+                        self._log_entry_skip(symbol, "not_newly_closed")
+                        continue
+
+                    if symbol not in self.active_universe:
+                        self._log_entry_skip(symbol, "not_in_active_universe")
+                        continue
+
+                    if symbol in self.position_manager.open_symbols():
+                        self._log_entry_skip(symbol, "already_open")
+                        continue
+
+                    if not self.position_manager.can_open_new():
+                        self._log_entry_skip(symbol, "max_positions_reached")
+                        break
+
+                    if symbol in self.cooldown and time.time() - self.cooldown[symbol] < self.cooldown_seconds:
+                        remaining = self.cooldown_seconds - (time.time() - self.cooldown[symbol])
+                        self._log_entry_skip(symbol, "cooldown", f"remaining_sec={remaining:.2f}")
+                        continue
+
+                    if not self._is_liquid(symbol):
+                        self._log_entry_skip(symbol, "liquidity_block")
+                        continue
+
+                    price = candle["close"]
+
+                    out = self.routers[symbol].on_candle(
+                        price,
+                        candle["high"],
+                        candle["low"],
+                        candle["close_time"]
+                    )
+
+                    self._log_strategy_result(symbol, out)
+
+                    if out.signal:
+
+                        self.trade_logger.log_signal(
+                            symbol=symbol,
+                            direction=out.signal.direction,
+                            price=price,
+                            atr=out.signal.atr
+                        )
+
+                        candidates.append({
+                            "symbol": symbol,
+                            "signal": out.signal,
+                            "price": price,
+                            "meta": getattr(out, "meta", {}) or {},
+                            "regime": getattr(out, "regime", None),
+                            "strategy_used": getattr(out, "strategy_used", None),
+                        })
+                    else:
+                        self._log_entry_skip(symbol, "no_signal")
+
+                if not candidates:
+                    self._flush_entry_skip_summary()
+                    logger.info("[SCAN] no candidates produced this loop")
+                    await asyncio.sleep(self.loop_interval)
                     continue
 
-                self.last_processed_candle[symbol] = close_time
-                newly_closed_symbols.add(symbol)
-                candle_map[symbol] = candle
-
-                price = candle["close"]
-                latest_prices[symbol] = price
-
-                self.price_history.setdefault(symbol, []).append(price)
-
-                if len(self.price_history[symbol]) > 100:
-                    self.price_history[symbol].pop(0)
-
-            if latest_prices:
-                self.capital.mark_to_market(latest_prices)
-
-            if candle_map:
-                await self._process_exits(candle_map, latest_prices)
-
-            self.check_portfolio_drawdown()
-
-            if self.circuit_breaker_triggered:
-                logger.warning("Circuit breaker active")
-                await asyncio.sleep(self.loop_interval)
-                continue
-
-            now = time.time()
-
-            if now - self.last_universe_refresh > self.universe_refresh_sec:
-
-                self.active_universe = self.universe_selector.select(self.price_history) or self.symbols
-                self.last_universe_refresh = now
-
-                logger.info(f"[UNIVERSE REFRESH] {self.active_universe}")
-
-            candidates = []
-            self._entry_skip_reasons = {}
-
-            for symbol, candle in candle_results:
-
-                if not candle:
-                    self._log_entry_skip(symbol, "no_candle")
-                    continue
-
-                if symbol not in newly_closed_symbols:
-                    self._log_entry_skip(symbol, "not_newly_closed")
-                    continue
-
-                if symbol not in self.active_universe:
-                    self._log_entry_skip(symbol, "not_in_active_universe")
-                    continue
-
-                if symbol in self.position_manager.open_symbols():
-                    self._log_entry_skip(symbol, "already_open")
-                    continue
-
-                if not self.position_manager.can_open_new():
-                    self._log_entry_skip(symbol, "max_positions_reached")
-                    break
-
-                if symbol in self.cooldown and time.time() - self.cooldown[symbol] < self.cooldown_seconds:
-                    remaining = self.cooldown_seconds - (time.time() - self.cooldown[symbol])
-                    self._log_entry_skip(symbol, "cooldown", f"remaining_sec={remaining:.2f}")
-                    continue
-
-                if not self._is_liquid(symbol):
-                    self._log_entry_skip(symbol, "liquidity_block")
-                    continue
-
-                price = candle["close"]
-
-                out = self.routers[symbol].on_candle(
-                    price,
-                    candle["high"],
-                    candle["low"],
-                    candle["close_time"]
+                best = rank_signals(
+                    candidates,
+                    correlation_engine=self.correlation,
+                    open_symbols=self.position_manager.open_symbols()
                 )
 
-                self._log_strategy_result(symbol, out)
+                if not best:
+                    self._flush_entry_skip_summary()
+                    logger.info(f"[SCAN] candidates={len(candidates)} but ranker returned no selection")
+                    await asyncio.sleep(self.loop_interval)
+                    continue
 
-                if out.signal:
+                symbol = best.symbol
+                direction = best.signal.direction
+                atr = best.signal.atr
 
-                    self.trade_logger.log_signal(
+                price = next(
+                    (c["price"] for c in candidates if c["symbol"] == symbol),
+                    None
+                )
+
+                if price is None:
+                    logger.warning(f"[PRICE MISSING] could not resolve candidate price for {symbol}")
+                    await asyncio.sleep(self.loop_interval)
+                    continue
+
+                base_size = self.risk.calculate_position_size(
+                    self.capital.equity,
+                    price,
+                    atr
+                )
+
+                base_size *= self.vol_scaler.scale(self.price_history.get(symbol, []))
+
+                best_meta = next(
+                    (c.get("meta", {}) for c in candidates if c["symbol"] == symbol),
+                    {}
+                )
+
+                base_size *= self.signal_strength.scale(best.signal, best_meta)
+
+                decision = self.global_risk.approve_trade(
+                    equity=self.capital.equity,
+                    proposed_notional=base_size * price
+                )
+
+                if not decision.allowed:
+                    self._flush_entry_skip_summary()
+                    logger.warning(f"[GLOBAL RISK BLOCK] {decision.reason}")
+                    await asyncio.sleep(self.loop_interval)
+                    continue
+
+                routes = SYMBOL_ROUTES.get(symbol, {})
+
+                executable_chains = [
+                    chain for chain in self.executors
+                    if routes.get(chain)
+                ]
+
+                if not executable_chains:
+                    self._flush_entry_skip_summary()
+                    logger.warning(f"[NO EXECUTION ROUTE] {symbol}")
+                    await asyncio.sleep(self.loop_interval)
+                    continue
+
+                chain_size = base_size / len(executable_chains)
+
+                async def execute_chain(chain):
+
+                    token = routes.get(chain)
+
+                    async def call():
+
+                        executor = self.executors[chain]
+
+                        return await executor.execute_trade(
+                            symbol=token,
+                            direction=direction,
+                            size=chain_size
+                        )
+
+                    return await self._with_retry(call, f"open {symbol} {chain}")
+
+                execution_results = await asyncio.gather(*[
+                    execute_chain(c) for c in executable_chains
+                ])
+
+                successful_legs = []
+                failed_chains = []
+
+                for chain, result in zip(executable_chains, execution_results):
+                    if self._extract_success(result):
+                        leg_size = self._extract_executed_size(result, chain_size)
+                        successful_legs.append((chain, result, leg_size))
+                    else:
+                        failed_chains.append(chain)
+
+                if successful_legs:
+
+                    entry_ts = int(time.time())
+                    total_executed_size = sum(leg_size for _, _, leg_size in successful_legs)
+
+                    for chain, result, executed_chain_size in successful_legs:
+                        trade_id = None
+
+                        tx_hash = self._extract_tx_hash(result)
+                        status = self._extract_status(result)
+
+                        logger.info(
+                            f"[EXECUTION OK] symbol={symbol} chain={chain} direction={direction} "
+                            f"requested_size={chain_size} executed_size={executed_chain_size} "
+                            f"tx_hash={tx_hash} status={status}"
+                        )
+
+                        try:
+                            trade_id = self.trade_logger.log_entry(
+                                symbol=symbol,
+                                chain=chain,
+                                direction=direction,
+                                size=executed_chain_size,
+                                entry_price=price,
+                                atr=atr,
+                                ts_open=entry_ts
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"[TRADE LOGGER ERROR] failed to persist entry for {symbol} on {chain}: {e}"
+                            )
+
+                        if trade_id is not None:
+                            self.trade_ids[self._trade_key(chain, symbol)] = trade_id
+
+                        try:
+                            self.capital.open_position(
+                                chain=chain,
+                                symbol=symbol,
+                                direction=direction,
+                                entry_price=price,
+                                size=executed_chain_size
+                            )
+                        except Exception as e:
+                            logger.error(
+                                f"[CAPITAL ERROR] failed to open accounting position for {symbol} on {chain}: {e}"
+                            )
+
+                    self.global_risk.on_trade_executed()
+
+                    self.cooldown[symbol] = time.time()
+
+                    self.position_manager.open_position(
                         symbol=symbol,
-                        direction=out.signal.direction,
-                        price=price,
-                        atr=out.signal.atr
-                    )
-
-                    candidates.append({
-                        "symbol": symbol,
-                        "signal": out.signal,
-                        "price": price,
-                        "meta": getattr(out, "meta", {}) or {},
-                        "regime": getattr(out, "regime", None),
-                        "strategy_used": getattr(out, "strategy_used", None),
-                    })
-                else:
-                    self._log_entry_skip(symbol, "no_signal")
-
-            if not candidates:
-                self._flush_entry_skip_summary()
-                logger.info("[SCAN] no candidates produced this loop")
-                await asyncio.sleep(self.loop_interval)
-                continue
-
-            best = rank_signals(
-                candidates,
-                correlation_engine=self.correlation,
-                open_symbols=self.position_manager.open_symbols()
-            )
-
-            if not best:
-                self._flush_entry_skip_summary()
-                logger.info(f"[SCAN] candidates={len(candidates)} but ranker returned no selection")
-                await asyncio.sleep(self.loop_interval)
-                continue
-
-            symbol = best.symbol
-            direction = best.signal.direction
-            atr = best.signal.atr
-
-            price = next(
-                (c["price"] for c in candidates if c["symbol"] == symbol),
-                None
-            )
-
-            if price is None:
-                logger.warning(f"[PRICE MISSING] could not resolve candidate price for {symbol}")
-                await asyncio.sleep(self.loop_interval)
-                continue
-
-            base_size = self.risk.calculate_position_size(
-                self.capital.equity,
-                price,
-                atr
-            )
-
-            base_size *= self.vol_scaler.scale(self.price_history.get(symbol, []))
-
-            best_meta = next(
-                (c.get("meta", {}) for c in candidates if c["symbol"] == symbol),
-                {}
-            )
-
-            base_size *= self.signal_strength.scale(best.signal, best_meta)
-
-            decision = self.global_risk.approve_trade(
-                equity=self.capital.equity,
-                proposed_notional=base_size * price
-            )
-
-            if not decision.allowed:
-                self._flush_entry_skip_summary()
-                logger.warning(f"[GLOBAL RISK BLOCK] {decision.reason}")
-                await asyncio.sleep(self.loop_interval)
-                continue
-
-            routes = SYMBOL_ROUTES.get(symbol, {})
-
-            executable_chains = [
-                chain for chain in self.executors
-                if routes.get(chain)
-            ]
-
-            if not executable_chains:
-                self._flush_entry_skip_summary()
-                logger.warning(f"[NO EXECUTION ROUTE] {symbol}")
-                await asyncio.sleep(self.loop_interval)
-                continue
-
-            chain_size = base_size / len(executable_chains)
-
-            async def execute_chain(chain):
-
-                token = routes.get(chain)
-
-                async def call():
-
-                    executor = self.executors[chain]
-
-                    return await executor.execute_trade(
-                        symbol=token,
                         direction=direction,
-                        size=chain_size
+                        entry_price=price,
+                        size=total_executed_size,
+                        atr=atr,
+                        entry_ts=entry_ts
                     )
 
-                return await self._with_retry(call, f"open {symbol} {chain}")
-
-            execution_results = await asyncio.gather(*[
-                execute_chain(c) for c in executable_chains
-            ])
-
-            successful_legs = []
-            failed_chains = []
-
-            for chain, result in zip(executable_chains, execution_results):
-                if self._extract_success(result):
-                    leg_size = self._extract_executed_size(result, chain_size)
-                    successful_legs.append((chain, result, leg_size))
-                else:
-                    failed_chains.append(chain)
-
-            if successful_legs:
-
-                entry_ts = int(time.time())
-                total_executed_size = sum(leg_size for _, _, leg_size in successful_legs)
-
-                for chain, result, executed_chain_size in successful_legs:
-                    trade_id = None
-
-                    tx_hash = self._extract_tx_hash(result)
-                    status = self._extract_status(result)
+                    self._flush_entry_skip_summary()
 
                     logger.info(
-                        f"[EXECUTION OK] symbol={symbol} chain={chain} direction={direction} "
-                        f"requested_size={chain_size} executed_size={executed_chain_size} "
-                        f"tx_hash={tx_hash} status={status}"
+                        f"[TRADE OPENED] symbol={symbol} direction={direction} "
+                        f"price={price} size={total_executed_size} "
+                        f"chains={[chain for chain, _, _ in successful_legs]} "
+                        f"failed_chains={failed_chains}"
                     )
 
-                    try:
-                        trade_id = self.trade_logger.log_entry(
-                            symbol=symbol,
-                            chain=chain,
-                            direction=direction,
-                            size=executed_chain_size,
-                            entry_price=price,
-                            atr=atr,
-                            ts_open=entry_ts
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"[TRADE LOGGER ERROR] failed to persist entry for {symbol} on {chain}: {e}"
-                        )
+                    self.send_telegram(
+                        f"🚀 Trade Opened {symbol} {direction} size={total_executed_size} "
+                        f"chains={','.join(chain for chain, _, _ in successful_legs)}"
+                    )
+                else:
+                    self._flush_entry_skip_summary()
+                    logger.warning(
+                        f"[EXECUTION FAILED] symbol={symbol} direction={direction} "
+                        f"chains={executable_chains} failed_chains={failed_chains}"
+                    )
 
-                    if trade_id is not None:
-                        self.trade_ids[self._trade_key(chain, symbol)] = trade_id
+                await asyncio.sleep(self.loop_interval)
 
-                    try:
-                        self.capital.open_position(
-                            chain=chain,
-                            symbol=symbol,
-                            direction=direction,
-                            entry_price=price,
-                            size=executed_chain_size
-                        )
-                    except Exception as e:
-                        logger.error(
-                            f"[CAPITAL ERROR] failed to open accounting position for {symbol} on {chain}: {e}"
-                        )
-
-                self.global_risk.on_trade_executed()
-
-                self.cooldown[symbol] = time.time()
-
-                self.position_manager.open_position(
-                    symbol=symbol,
-                    direction=direction,
-                    entry_price=price,
-                    size=total_executed_size,
-                    atr=atr,
-                    entry_ts=entry_ts
-                )
-
-                self._flush_entry_skip_summary()
-
-                logger.info(
-                    f"[TRADE OPENED] symbol={symbol} direction={direction} "
-                    f"price={price} size={total_executed_size} "
-                    f"chains={[chain for chain, _, _ in successful_legs]} "
-                    f"failed_chains={failed_chains}"
-                )
-
-                self.send_telegram(
-                    f"🚀 Trade Opened {symbol} {direction} size={total_executed_size} "
-                    f"chains={','.join(chain for chain, _, _ in successful_legs)}"
-                )
-            else:
-                self._flush_entry_skip_summary()
-                logger.warning(
-                    f"[EXECUTION FAILED] symbol={symbol} direction={direction} "
-                    f"chains={executable_chains} failed_chains={failed_chains}"
-                )
-
-            await asyncio.sleep(self.loop_interval)
+        finally:
+            self._save_strategy_state()
