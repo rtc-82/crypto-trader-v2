@@ -219,6 +219,42 @@ class MultiChainOrchestrator:
 
         return float(fallback_size)
 
+    def _extract_tx_hash(self, result):
+        if result is None:
+            return None
+
+        for attr in ("tx_hash", "transaction_hash", "hash"):
+            if hasattr(result, attr):
+                value = getattr(result, attr)
+                if value:
+                    return str(value)
+
+        if isinstance(result, dict):
+            for key in ("tx_hash", "transaction_hash", "hash"):
+                value = result.get(key)
+                if value:
+                    return str(value)
+
+        return None
+
+    def _extract_status(self, result):
+        if result is None:
+            return None
+
+        for attr in ("status", "fill_status", "state"):
+            if hasattr(result, attr):
+                value = getattr(result, attr)
+                if value is not None:
+                    return str(value)
+
+        if isinstance(result, dict):
+            for key in ("status", "fill_status", "state"):
+                value = result.get(key)
+                if value is not None:
+                    return str(value)
+
+        return None
+
     def _get_open_chains_for_symbol(self, symbol: str) -> List[str]:
         chains = []
         for chain in self.executors.keys():
@@ -384,6 +420,8 @@ class MultiChainOrchestrator:
             "vol_threshold",
             "breakout_high",
             "breakout_low",
+            "breakout_distance",
+            "previous_slope",
         ]
 
         parts = []
@@ -850,7 +888,10 @@ class MultiChainOrchestrator:
                     candidates.append({
                         "symbol": symbol,
                         "signal": out.signal,
-                        "price": price
+                        "price": price,
+                        "meta": getattr(out, "meta", {}) or {},
+                        "regime": getattr(out, "regime", None),
+                        "strategy_used": getattr(out, "strategy_used", None),
                     })
                 else:
                     self._log_entry_skip(symbol, "no_signal")
@@ -894,7 +935,13 @@ class MultiChainOrchestrator:
             )
 
             base_size *= self.vol_scaler.scale(self.price_history.get(symbol, []))
-            base_size *= self.signal_strength.scale(best.signal)
+
+            best_meta = next(
+                (c.get("meta", {}) for c in candidates if c["symbol"] == symbol),
+                {}
+            )
+
+            base_size *= self.signal_strength.scale(best.signal, best_meta)
 
             decision = self.global_risk.approve_trade(
                 equity=self.capital.equity,
@@ -959,6 +1006,15 @@ class MultiChainOrchestrator:
 
                 for chain, result, executed_chain_size in successful_legs:
                     trade_id = None
+
+                    tx_hash = self._extract_tx_hash(result)
+                    status = self._extract_status(result)
+
+                    logger.info(
+                        f"[EXECUTION OK] symbol={symbol} chain={chain} direction={direction} "
+                        f"requested_size={chain_size} executed_size={executed_chain_size} "
+                        f"tx_hash={tx_hash} status={status}"
+                    )
 
                     try:
                         trade_id = self.trade_logger.log_entry(
