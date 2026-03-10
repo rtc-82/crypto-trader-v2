@@ -165,6 +165,9 @@ class MultiChainOrchestrator:
         self._strategy_debug_enabled = True
         self._strategy_debug_log_signals = True
 
+        self._last_health_log_time = 0.0
+        self._health_log_interval_sec = 300
+
         self._restore_open_trade_state()
         self._load_strategy_state()
 
@@ -296,6 +299,11 @@ class MultiChainOrchestrator:
                 json.dump(data, f)
 
             os.replace(tmp_path, self.strategy_state_path)
+
+            logger.info(
+                f"[STATE SAVE] saved strategy state for {len(data['routers'])} symbols "
+                f"to {self.strategy_state_path}"
+            )
 
         except Exception as e:
             logger.error(f"[STATE SAVE ERROR] {e}")
@@ -871,6 +879,18 @@ class MultiChainOrchestrator:
                     self._save_strategy_state()
 
                 self.check_portfolio_drawdown()
+
+                now = time.time()
+
+                if now - self._last_health_log_time >= self._health_log_interval_sec:
+                    logger.info(
+                        f"[HEALTH] equity={self.capital.equity:.6f} "
+                        f"open_positions={len(self.position_manager.open_symbols())} "
+                        f"breaker={self.circuit_breaker_triggered} "
+                        f"symbols={len(self.symbols)} "
+                        f"newly_closed={len(newly_closed_symbols)}"
+                    )
+                    self._last_health_log_time = now
 
                 if self.circuit_breaker_triggered:
                     logger.warning("Circuit breaker active")
