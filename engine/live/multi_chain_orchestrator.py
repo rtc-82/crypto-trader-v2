@@ -998,10 +998,18 @@ class MultiChainOrchestrator:
 
                 base_size *= self.signal_strength.scale(best.signal, best_meta)
 
+                logger.info(
+                    f"[RISK CHECK] symbol={symbol} equity={self.capital.equity:.6f} "
+                    f"price={price:.6f} atr={float(atr):.6f} base_size={base_size:.6f} "
+                    f"proposed_notional={(base_size * price):.6f}"
+                )
+
                 decision = self.global_risk.approve_trade(
                     equity=self.capital.equity,
                     proposed_notional=base_size * price
                 )
+
+            
 
                 if not decision.allowed:
                     self._flush_entry_skip_summary()
