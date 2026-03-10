@@ -882,12 +882,18 @@ class MultiChainOrchestrator:
 
                 now = time.time()
 
+                now = time.time()
+
                 if now - self._last_health_log_time >= self._health_log_interval_sec:
-                    db_open_trades = len(self.trade_logger.get_open_trades())
-                    
+                    try:
+                        db_open_trades = len(self.trade_logger.get_open_trades())
+                    except Exception:
+                        db_open_trades = -1
+
                     logger.info(
                         f"[HEALTH] equity={self.capital.equity:.6f} "
                         f"open_positions={len(self.position_manager.open_symbols())} "
+                        f"db_open_trades={db_open_trades} "
                         f"breaker={self.circuit_breaker_triggered} "
                         f"symbols={len(self.symbols)} "
                         f"newly_closed={len(newly_closed_symbols)}"
