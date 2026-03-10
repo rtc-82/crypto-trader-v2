@@ -998,6 +998,23 @@ class MultiChainOrchestrator:
 
                 base_size *= self.signal_strength.scale(best.signal, best_meta)
 
+                max_trade_fraction = GLOBAL_RISK_CONFIG["max_trade_fraction"]
+                max_notional = self.capital.equity * max_trade_fraction
+
+                if price > 0:
+                    capped_size = min(base_size, max_notional / price)
+                else:
+                    capped_size = 0.0
+
+                if capped_size < base_size:
+                    logger.info(
+                        f"[SIZE CLAMP] symbol={symbol} "
+                        f"base_size={base_size:.6f} capped_size={capped_size:.6f} "
+                        f"price={price:.6f} max_notional={max_notional:.6f}"
+                    )
+
+                base_size = capped_size
+
                 logger.info(
                     f"[RISK CHECK] symbol={symbol} equity={self.capital.equity:.6f} "
                     f"price={price:.6f} atr={float(atr):.6f} base_size={base_size:.6f} "
