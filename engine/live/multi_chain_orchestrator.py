@@ -562,6 +562,25 @@ class MultiChainOrchestrator:
             f"strategy={strategy_used} result=signal direction={direction}{atr_part}{meta_suffix}"
         )
 
+    def _telegram_status_suffix(self) -> str:
+        try:
+            db_open_trades = len(self.trade_logger.get_open_trades())
+        except Exception:
+            db_open_trades = -1
+
+        try:
+            open_positions = len(self.position_manager.open_symbols())
+        except Exception:
+            open_positions = -1
+
+        return (
+            f"\n\n"
+            f"💰 Equity: {self.capital.equity:.2f}"
+            f"\n📂 Open positions: {open_positions}"
+            f"\n🗂 DB open trades: {db_open_trades}"
+            f"\n🛡 Breaker: {self.circuit_breaker_triggered}"
+        )
+
     def send_telegram(self, message):
 
         if not self.telegram_token:
@@ -615,7 +634,11 @@ class MultiChainOrchestrator:
             self.circuit_breaker_triggered = True
             self.circuit_breaker_time = time.time()
 
-            self.send_telegram(f"🚨 Circuit breaker triggered {drawdown:.2%}")
+            self.send_telegram(
+                f"🚨 Circuit breaker triggered"
+                f"\nDrawdown: {drawdown:.2%}"
+                + self._telegram_status_suffix()
+            )
 
     def _reset_circuit_breaker_if_needed(self):
 
@@ -811,8 +834,11 @@ class MultiChainOrchestrator:
                 self.cooldown[symbol] = time.time()
 
                 self.send_telegram(
-                    f"✅ Trade Closed {symbol} exit={exit_price} "
-                    f"closed_chains={','.join(successful_close_chains)}"
+                    f"✅ Trade Closed"
+                    f"\nSymbol: {symbol}"
+                    f"\nExit: {exit_price:.6f}"
+                    f"\nClosed chains: {','.join(successful_close_chains)}"
+                    + self._telegram_status_suffix()
                 )
             else:
                 logger.warning(
@@ -829,6 +855,9 @@ class MultiChainOrchestrator:
     async def run(self):
 
         logger.info("Multi-chain engine started.")
+        self.send_telegram(
+            "🤖 Bot started / restarted" + self._telegram_status_suffix()
+        )
 
         self._sync_global_risk_daily_baseline_if_needed()
 
@@ -879,8 +908,6 @@ class MultiChainOrchestrator:
                     self._save_strategy_state()
 
                 self.check_portfolio_drawdown()
-
-                now = time.time()
 
                 now = time.time()
 
@@ -1054,8 +1081,6 @@ class MultiChainOrchestrator:
                     proposed_notional=base_size * price
                 )
 
-            
-
                 if not decision.allowed:
                     self._flush_entry_skip_summary()
                     logger.warning(f"[GLOBAL RISK BLOCK] {decision.reason}")
@@ -1178,8 +1203,13 @@ class MultiChainOrchestrator:
                     )
 
                     self.send_telegram(
-                        f"🚀 Trade Opened {symbol} {direction} size={total_executed_size} "
-                        f"chains={','.join(chain for chain, _, _ in successful_legs)}"
+                        f"🚀 Trade Opened"
+                        f"\nSymbol: {symbol}"
+                        f"\nDirection: {direction}"
+                        f"\nSize: {total_executed_size:.6f}"
+                        f"\nEntry: {price:.6f}"
+                        f"\nChains: {','.join(chain for chain, _, _ in successful_legs)}"
+                        + self._telegram_status_suffix()
                     )
                 else:
                     self._flush_entry_skip_summary()
