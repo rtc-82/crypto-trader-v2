@@ -1,358 +1,156 @@
-# research/v4_multichain_engine/config.py
-
-from __future__ import annotations
-
-# ============================================================
-# STRATEGY CONFIG
-# ============================================================
+# engine/config/config.py
 
 STRATEGY_CONFIG = {
-
+    # Trend / regime detection
     "ema_period": 50,
-
     "atr_period": 14,
-
-    "slope_threshold": 0.12,
-
-    "volatility_percentile_threshold": 0.45,
-
+    "slope_threshold": 0.35,
+    "volatility_percentile_threshold": 0.65,
     "adx_threshold": 30,
+    "breakout_lookback": 18,
 
-    "breakout_lookback": 12,
+    # Mean reversion
+    "bb_period": 40,
+    "z_entry": 1.6,
+    "max_atr_percentile_for_mr": 0.55,
 }
 
-# ============================================================
-# ENGINE CONFIG
-# ============================================================
-
 ENGINE_CONFIG = {
-
-    # =========================================
-    # STARTING EQUITY
-    # =========================================
-
+    # Portfolio / runtime
     "starting_equity": 75.0,
+    "loop_interval": 5,
+    "portfolio_base_risk_pct": 0.01,
 
-    # =========================================
-    # STRATEGY
-    # =========================================
-
+    # Trade mechanics
     "atr_stop_multiplier": 1.5,
-
     "risk_reward_ratio": 1.4,
-
     "trade_cooldown": 0,
-
+    "trade_cooldown_sec": 1800,  # 30 minutes after a close
     "invert_signals": True,
 
-    # =========================================
-    # RUNTIME
-    # =========================================
+    # Safety
+    "daily_loss_limit_pct": 0.02,
+    "portfolio_circuit_breaker_dd": 0.08,
+    "circuit_breaker_cooldown_minutes": 240,
 
-    "loop_interval": 5,
+    # Execution / ops
+    "executor_timeout_sec": 20,
+    "executor_retries": 2,
+    "liquidity_ttl_sec": 300,
 
-    # =========================================
-    # SAFETY
-    # =========================================
+    # Portfolio controls
+    "score_lookback_trades": 120,
+    "max_concurrent_positions": 1,
+    "correlation_threshold": 0.70,
+    "correlation_lookback_bars": 200,
+    "correlation_min_bars": 80,
+    "phase_switch_equity": 200.0,
 
-    "daily_loss_limit_pct": 0.03,
-
-    # =========================================
-    # COST MODEL
-    # =========================================
-
+    # Friction model
     "cost_r": 0.05,
-
     "slippage_model": {
-
         "enabled": True,
-
         "mean_r": 0.03,
-
         "std_r": 0.02,
-
         "seed": 42,
-
         "clip_min_r": 0.0,
     },
 
-    # =========================================
-    # PORTFOLIO RISK
-    # =========================================
-
-    "portfolio_base_risk_pct": 0.02,
-
-    "score_lookback_trades": 120,
-
-    # ======================================================
-    # PORTFOLIO CIRCUIT BREAKER
-    # ======================================================
-
-    "portfolio_circuit_breaker_dd": 0.10,   # stop trading at 10% drawdown
-    "circuit_breaker_cooldown_minutes": 240,
-
-    # =========================================
-    # POSITION LIMITS
-    # =========================================
-
-    "max_concurrent_positions": 3,
-
-    # =========================================
-    # CORRELATION CONTROL
-    # =========================================
-
-    "correlation_threshold": 0.75,
-
-    "correlation_lookback_bars": 200,
-
-    "correlation_min_bars": 80,
-
-    # ======================================================
-    # PHASE SWITCHING
-    # ======================================================
-
-    "phase_switch_equity": 1000.0,
-
-    # ---------- ACCELERATION PHASE ----------
-
+    # Risk ladders
     "acceleration_risk_ladder": [
-
         (250, 0.0100),
-
-        (750, 0.0115),
-
-        (1500, 0.0125),
-
-        (3000, 0.0135),
-
-        (float("inf"), 0.0150),
+        (750, 0.0110),
+        (1500, 0.0120),
+        (3000, 0.0130),
+        (float("inf"), 0.0140),
     ],
-
-    # ---------- PRESERVATION PHASE ----------
-
     "preservation_risk_ladder": [
-
         (2500, 0.0100),
-
         (5000, 0.0090),
-
         (10000, 0.0080),
-
         (float("inf"), 0.0070),
     ],
 
-    # backward compatibility
+    # Optional compatibility alias if older code expects risk_ladder
     "risk_ladder": [
-
         (250, 0.0100),
-
-        (750, 0.0115),
-
-        (1500, 0.0125),
-
-        (3000, 0.0135),
-
-        (float("inf"), 0.0150),
+        (750, 0.0110),
+        (1500, 0.0120),
+        (3000, 0.0130),
+        (float("inf"), 0.0140),
     ],
 
-    # ======================================================
-    # KILL SWITCH
-    # ======================================================
-
+    # Kill switches
     "acceleration_kill_switch_dd": 0.18,
-
     "preservation_kill_switch_dd": 0.12,
 
-    # ======================================================
-    # PROFIT FACTOR THROTTLE
-    # ======================================================
-
+    # PF throttle
     "pf_rolling_window": 200,
-
-    # acceleration phase
     "pf_pause_below_accel": 0.85,
-
     "pf_half_risk_below_accel": 1.00,
-
     "pf_resume_above_accel": 1.15,
-
-    # preservation phase
     "pf_pause_below_preserve": 0.90,
-
     "pf_half_risk_below_preserve": 1.05,
-
     "pf_resume_above_preserve": 1.15,
 }
 
-# ============================================================
-# GLOBAL RISK ENGINE
-# ============================================================
-
 GLOBAL_RISK_CONFIG = {
-
-    # daily drawdown limit
-    "max_daily_loss_pct": ENGINE_CONFIG.get(
-        "daily_loss_limit_pct", 0.03
-    ),
-
-    # max trade notional vs equity
-    "max_trade_fraction": 0.20,
-
-    # max trades per hour
-    "max_trades_per_hour": 6,
+    "max_daily_loss_pct": ENGINE_CONFIG.get("daily_loss_limit_pct", 0.02),
+    "max_trade_fraction": 0.12,   # tighter than aggressive config
+    "max_trades_per_hour": 4,
 }
 
-# ============================================================
-# POSITION CONFIG
-# ============================================================
-
 POSITION_CONFIG = {
-
-    "max_concurrent_positions": ENGINE_CONFIG.get(
-        "max_concurrent_positions", 1
-    ),
-
-    "allow_multiple_symbols": True,
-
+    "max_concurrent_positions": ENGINE_CONFIG.get("max_concurrent_positions", 1),
+    "allow_multiple_symbols": False,
     "prevent_same_symbol_reentry": True,
 }
 
-# ============================================================
-# SIGNAL RANKING
-# ============================================================
-
 SIGNAL_RANKING_CONFIG = {
-
     "w_slope": 0.60,
-
     "w_vol": 0.40,
-
     "require_meta": False,
 }
 
-# ============================================================
-# DYNAMIC MARKET UNIVERSE
-# ============================================================
-
 UNIVERSE_CONFIG = {
-
-    # how often universe rotates
     "refresh_interval_minutes": 240,
-
-    # how many symbols to trade
-    "universe_size": 20,
+    "universe_size": 10,
 }
-
-# ============================================================
-# REGIME RISK SCALING
-# ============================================================
 
 RISK_SCALING_CONFIG = {
-
     "enabled": True,
-
-    "min_mult": 0.25,
-
-    "max_mult": 1.50,
-
-    # slope strength scaling
+    "min_mult": 0.50,
+    "max_mult": 1.15,
     "slope": {
-
-        "low": 0.10,
-
+        "low": 0.12,
         "high": 0.35,
-
-        "low_mult": 0.60,
-
-        "high_mult": 1.25,
+        "low_mult": 0.75,
+        "high_mult": 1.10,
     },
-
-    # volatility percentile scaling
     "vol": {
-
         "low": 0.55,
-
         "high": 0.85,
-
-        "low_mult": 0.80,
-
-        "high_mult": 1.15,
+        "low_mult": 0.85,
+        "high_mult": 1.10,
     },
-
-    # regime based scaling
     "regime_mult": {
-
-        "TRENDING": 1.10,
-
-        "RANGE": 0.75,
-
-        "UNKNOWN": 0.90,
+        "TRENDING": 1.05,
+        "COMPRESSION": 0.85,
+        "NEUTRAL": 0.75,
+        "RANGE": 0.85,     # compatibility if older code uses RANGE
+        "UNKNOWN": 0.80,
     },
 }
 
-# ============================================================
-# KELLY PORTFOLIO SIZING
-# ============================================================
-
 KELLY_CONFIG = {
-
-    "enabled": True,
-
-    # fraction of Kelly to use (safety)
+    "enabled": False,   # safer for live conservative engine
     "kelly_fraction": 0.25,
-
-    # minimum sample size before using Kelly
     "min_trades": 50,
-
-    # bounds to prevent extreme sizing
     "min_mult": 0.5,
     "max_mult": 1.5,
 }
 
-# ================================
-# LIQUIDITY FILTER
-# ================================
-
 LIQUIDITY_CONFIG = {
-
-    # minimum 24h volume in USDT
-    "min_volume_usdt": 10_000_000,
-
-    # maximum spread %
-    "max_spread_pct": 0.002,   # 0.2%
-
-}
-
-# ============================================================
-# MONTE CARLO
-# ============================================================
-
-MONTE_CARLO_CONFIG = {
-
-    "enabled": True,
-
-    "simulations": 1000,
-
-    "seed": 42,
-
-    "run_baseline": True,
-
-    "run_cost_2x": True,
-
-    "run_loss_clustering": True,
-
-    "run_slippage": True,
-
-    "slippage_mean_r": 0.03,
-
-    "slippage_std_r": 0.02,
-
-    "block_min": 10,
-
-    "block_max": 30,
-
-    # infrastructure fail thresholds
-    "dd_fail_level": 0.25,
-
-    "pf_fail_level": 1.00,
+    "min_volume_usdt": 15_000_000,
+    "max_spread_pct": 0.002,
 }
