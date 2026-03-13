@@ -4,10 +4,10 @@ STRATEGY_CONFIG = {
     # Trend / regime detection
     "ema_period": 50,
     "atr_period": 14,
-    "slope_threshold": 0.35,
-    "volatility_percentile_threshold": 0.65,
+    "slope_threshold": 0.30,
+    "volatility_percentile_threshold": 0.60,
     "adx_threshold": 30,
-    "breakout_lookback": 18,
+    "breakout_lookback": 16,
 
     # Mean reversion
     "bb_period": 40,
@@ -19,18 +19,18 @@ ENGINE_CONFIG = {
     # Portfolio / runtime
     "starting_equity": 75.0,
     "loop_interval": 5,
-    "portfolio_base_risk_pct": 0.01,
+    "portfolio_base_risk_pct": 0.0075,
 
     # Trade mechanics
-    "atr_stop_multiplier": 1.5,
+    "atr_stop_multiplier": 1.7,
     "risk_reward_ratio": 1.4,
     "trade_cooldown": 0,
-    "trade_cooldown_sec": 1800,  # 30 minutes after a close
+    "trade_cooldown_sec": 2400,  # 40 minutes after a close
     "invert_signals": True,
 
     # Safety
-    "daily_loss_limit_pct": 0.02,
-    "portfolio_circuit_breaker_dd": 0.08,
+    "daily_loss_limit_pct": 0.018,
+    "portfolio_circuit_breaker_dd": 0.07,
     "circuit_breaker_cooldown_minutes": 240,
 
     # Execution / ops
@@ -41,7 +41,7 @@ ENGINE_CONFIG = {
     # Portfolio controls
     "score_lookback_trades": 120,
     "max_concurrent_positions": 1,
-    "correlation_threshold": 0.70,
+    "correlation_threshold": 0.68,
     "correlation_lookback_bars": 200,
     "correlation_min_bars": 80,
     "phase_switch_equity": 200.0,
@@ -95,9 +95,9 @@ ENGINE_CONFIG = {
 }
 
 GLOBAL_RISK_CONFIG = {
-    "max_daily_loss_pct": ENGINE_CONFIG.get("daily_loss_limit_pct", 0.02),
-    "max_trade_fraction": 0.12,   # tighter than aggressive config
-    "max_trades_per_hour": 4,
+    "max_daily_loss_pct": ENGINE_CONFIG.get("daily_loss_limit_pct", 0.018),
+    "max_trade_fraction": 0.10,
+    "max_trades_per_hour": 3,
 }
 
 POSITION_CONFIG = {
@@ -107,8 +107,8 @@ POSITION_CONFIG = {
 }
 
 SIGNAL_RANKING_CONFIG = {
-    "w_slope": 0.60,
-    "w_vol": 0.40,
+    "w_slope": 0.65,
+    "w_vol": 0.35,
     "require_meta": False,
 }
 
@@ -120,30 +120,30 @@ UNIVERSE_CONFIG = {
 RISK_SCALING_CONFIG = {
     "enabled": True,
     "min_mult": 0.50,
-    "max_mult": 1.15,
+    "max_mult": 1.10,
     "slope": {
-        "low": 0.12,
-        "high": 0.35,
-        "low_mult": 0.75,
-        "high_mult": 1.10,
+        "low": 0.10,
+        "high": 0.30,
+        "low_mult": 0.80,
+        "high_mult": 1.05,
     },
     "vol": {
-        "low": 0.55,
-        "high": 0.85,
+        "low": 0.50,
+        "high": 0.80,
         "low_mult": 0.85,
-        "high_mult": 1.10,
+        "high_mult": 1.05,
     },
     "regime_mult": {
         "TRENDING": 1.05,
-        "COMPRESSION": 0.85,
-        "NEUTRAL": 0.75,
-        "RANGE": 0.85,     # compatibility if older code uses RANGE
-        "UNKNOWN": 0.80,
+        "COMPRESSION": 0.80,
+        "NEUTRAL": 0.70,
+        "RANGE": 0.80,   # compatibility if older code uses RANGE
+        "UNKNOWN": 0.75,
     },
 }
 
 KELLY_CONFIG = {
-    "enabled": False,   # safer for live conservative engine
+    "enabled": False,   # keep disabled for weekend live validation
     "kelly_fraction": 0.25,
     "min_trades": 50,
     "min_mult": 0.5,
@@ -151,6 +151,6 @@ KELLY_CONFIG = {
 }
 
 LIQUIDITY_CONFIG = {
-    "min_volume_usdt": 15_000_000,
+    "min_volume_usdt": 20_000_000,
     "max_spread_pct": 0.002,
 }

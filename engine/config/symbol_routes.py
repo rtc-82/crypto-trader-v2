@@ -1,48 +1,48 @@
 SYMBOL_ROUTES = {
-
-    "BTCUSDT": {
-        "base": "WBTC",
-        "solana": "WBTC"
+    "SOLUSDT": {
+        "base": None,
+        "solana": "SOL",
     },
 
     "ETHUSDT": {
         "base": "WETH",
-        "solana": "ETH"
+        "solana": None,
     },
 
-    "SOLUSDT": {
+    "JUPUSDT": {
         "base": None,
-        "solana": "SOL"
+        "solana": "JUP",
     },
 
     "LINKUSDT": {
         "base": "LINK",
-        "solana": None
+        "solana": None,
     },
 
-    "AVAXUSDT": {
+    "AAVEUSDT": {
+        "base": "AAVE",
+        "solana": None,
+    },
+
+    "PYTHUSDT": {
         "base": None,
-        "solana": None
+        "solana": "PYTH",
     },
 
-    "MATICUSDT": {
+    "ENAUSDT": {
+        "base": "ENA",
+        "solana": None,
+    },
+
+    "BONKUSDT": {
         "base": None,
-        "solana": None
+        "solana": "BONK",
     },
 
-    "ADAUSDT": {
+    "RAYUSDT": {
         "base": None,
-        "solana": None
+        "solana": "RAY",
     },
 
-    "DOGEUSDT": {
-        "base": None,
-        "solana": None
-    },
-
-    "XRPUSDT": {
-        "base": None,
-        "solana": None
-    },
-
+    
 }

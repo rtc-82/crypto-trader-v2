@@ -1,12 +1,12 @@
 SYMBOLS = [
-    "BTCUSDT",
-    "ETHUSDT",
     "SOLUSDT",
-    "BNBUSDT",
-    "XRPUSDT",
+    "ETHUSDT",
+    "JUPUSDT",
     "LINKUSDT",
-    "ADAUSDT",
-    "AVAXUSDT",
-    "DOGEUSDT",
-    "ATOMUSDT",
+    "AAVEUSDT",
+    "PYTHUSDT",
+    "ENAUSDT",
+    "BONKUSDT",
+    "RAYUSDT",
+    
 ]
