@@ -5,33 +5,27 @@ import asyncio
 from engine.live.multi_chain_orchestrator import MultiChainOrchestrator
 from engine.utils.logger import setup_logger
 
+from engine.config.config import ENGINE_CONFIG
+from engine.config.symbols import SYMBOLS
+
+
 # -------------------------------------------------
 # CONFIG
 # -------------------------------------------------
 
-INITIAL_EQUITY = 1000.0
-
-# MULTI-SYMBOL LIST (engine currently uses first symbol)
-BINANCE_SYMBOLS = [
-    "BTCUSDT",
-    "ETHUSDT",
-    "SOLUSDT",
-]
-
+INITIAL_EQUITY = ENGINE_CONFIG.get("starting_equity", 1000.0)
+BINANCE_SYMBOLS = SYMBOLS
 BINANCE_INTERVAL = "5m"
-
-LOOP_INTERVAL = 10
-MAX_DRAWDOWN = 0.20
+LOOP_INTERVAL = ENGINE_CONFIG.get("loop_interval", 10)
+MAX_DRAWDOWN = ENGINE_CONFIG.get("portfolio_circuit_breaker_dd", 0.20)
 
 
 async def main():
-
     # -------------------------------------------------
     # LOGGER
     # -------------------------------------------------
 
     logger = setup_logger()
-
     logger.info("Starting Crypto Trader V2")
 
     # -------------------------------------------------
@@ -82,20 +76,18 @@ async def main():
     }
 
     # -------------------------------------------------
-    # SELECT SYMBOL (TEMPORARY UNTIL MULTI-SYMBOL ENGINE)
-    # -------------------------------------------------
-
-    symbol = BINANCE_SYMBOLS[0]
-
-    logger.info(f"Trading symbol: {symbol}")
-
-    # -------------------------------------------------
     # ORCHESTRATOR
     # -------------------------------------------------
 
+    logger.info(f"Trading symbols: {BINANCE_SYMBOLS}")
+
+    # Compatibility note:
+    # MultiChainOrchestrator still expects `symbol=...` in its constructor.
+    # The live engine is already scanning the configured basket, so we keep
+    # a placeholder symbol here instead of reworking constructor internals.
     orchestrator = MultiChainOrchestrator(
         executors=executors,
-        symbol=symbol,
+        symbol=BINANCE_SYMBOLS[0],
         interval=BINANCE_INTERVAL,
         loop_interval=LOOP_INTERVAL,
         initial_equity=INITIAL_EQUITY,
@@ -108,4 +100,7 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("Shutdown requested by user.")
