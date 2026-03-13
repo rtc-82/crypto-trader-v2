@@ -905,7 +905,6 @@ class MultiChainOrchestrator:
 
                 if candle_map:
                     await self._process_exits(candle_map, latest_prices)
-                    self._save_strategy_state()
 
                 self.check_portfolio_drawdown()
 
@@ -926,11 +925,6 @@ class MultiChainOrchestrator:
                         f"newly_closed={len(newly_closed_symbols)}"
                     )
                     self._last_health_log_time = now
-
-                if self.circuit_breaker_triggered:
-                    logger.warning("Circuit breaker active")
-                    await asyncio.sleep(self.loop_interval)
-                    continue
 
                 now = time.time()
 
@@ -1005,6 +999,15 @@ class MultiChainOrchestrator:
                         })
                     else:
                         self._log_entry_skip(symbol, "no_signal")
+
+                if candle_map:
+                    self._save_strategy_state()
+
+                if self.circuit_breaker_triggered:
+                    self._flush_entry_skip_summary()
+                    logger.warning("Circuit breaker active")
+                    await asyncio.sleep(self.loop_interval)
+                    continue
 
                 if not candidates:
                     self._flush_entry_skip_summary()
