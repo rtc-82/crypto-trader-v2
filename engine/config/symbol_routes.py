@@ -1,17 +1,12 @@
 SYMBOL_ROUTES = {
-    "SOLUSDT": {
-        "base": None,
-        "solana": "SOL",
-    },
-
     "ETHUSDT": {
         "base": "WETH",
         "solana": None,
     },
 
-    "JUPUSDT": {
+    "SOLUSDT": {
         "base": None,
-        "solana": "JUP",
+        "solana": "SOL",
     },
 
     "LINKUSDT": {
@@ -23,26 +18,4 @@ SYMBOL_ROUTES = {
         "base": "AAVE",
         "solana": None,
     },
-
-    "PYTHUSDT": {
-        "base": None,
-        "solana": "PYTH",
-    },
-
-    "ENAUSDT": {
-        "base": "ENA",
-        "solana": None,
-    },
-
-    "BONKUSDT": {
-        "base": None,
-        "solana": "BONK",
-    },
-
-    "RAYUSDT": {
-        "base": None,
-        "solana": "RAY",
-    },
-
-    
 }

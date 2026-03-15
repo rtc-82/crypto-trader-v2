@@ -1,12 +1,6 @@
 SYMBOLS = [
-    "SOLUSDT",
     "ETHUSDT",
-    "JUPUSDT",
+    "SOLUSDT",
     "LINKUSDT",
     "AAVEUSDT",
-    "PYTHUSDT",
-    "ENAUSDT",
-    "BONKUSDT",
-    "RAYUSDT",
-    
 ]
