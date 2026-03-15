@@ -19,18 +19,18 @@ ENGINE_CONFIG = {
     # Portfolio / runtime
     "starting_equity": 75.0,
     "loop_interval": 5,
-    "portfolio_base_risk_pct": 0.0075,
+    "portfolio_base_risk_pct": 0.0050,
 
     # Trade mechanics
     "atr_stop_multiplier": 1.7,
     "risk_reward_ratio": 1.4,
     "trade_cooldown": 0,
-    "trade_cooldown_sec": 2400,  # 40 minutes after a close
+    "trade_cooldown_sec": 3600,  # 60 minutes after a close
     "invert_signals": True,
 
     # Safety
-    "daily_loss_limit_pct": 0.018,
-    "portfolio_circuit_breaker_dd": 0.07,
+    "daily_loss_limit_pct": 0.015,
+    "portfolio_circuit_breaker_dd": 0.06,
     "circuit_breaker_cooldown_minutes": 240,
 
     # Execution / ops
@@ -41,7 +41,7 @@ ENGINE_CONFIG = {
     # Portfolio controls
     "score_lookback_trades": 120,
     "max_concurrent_positions": 1,
-    "correlation_threshold": 0.68,
+    "correlation_threshold": 0.62,
     "correlation_lookback_bars": 200,
     "correlation_min_bars": 80,
     "phase_switch_equity": 200.0,
@@ -71,7 +71,7 @@ ENGINE_CONFIG = {
         (float("inf"), 0.0070),
     ],
 
-    # Optional compatibility alias if older code expects risk_ladder
+    # Compatibility alias
     "risk_ladder": [
         (250, 0.0100),
         (750, 0.0110),
@@ -95,9 +95,9 @@ ENGINE_CONFIG = {
 }
 
 GLOBAL_RISK_CONFIG = {
-    "max_daily_loss_pct": ENGINE_CONFIG.get("daily_loss_limit_pct", 0.018),
-    "max_trade_fraction": 0.10,
-    "max_trades_per_hour": 3,
+    "max_daily_loss_pct": ENGINE_CONFIG.get("daily_loss_limit_pct", 0.015),
+    "max_trade_fraction": 0.08,
+    "max_trades_per_hour": 2,
 }
 
 POSITION_CONFIG = {
@@ -114,7 +114,7 @@ SIGNAL_RANKING_CONFIG = {
 
 UNIVERSE_CONFIG = {
     "refresh_interval_minutes": 240,
-    "universe_size": 10,
+    "universe_size": 3,
 }
 
 RISK_SCALING_CONFIG = {
@@ -137,13 +137,13 @@ RISK_SCALING_CONFIG = {
         "TRENDING": 1.05,
         "COMPRESSION": 0.80,
         "NEUTRAL": 0.70,
-        "RANGE": 0.80,   # compatibility if older code uses RANGE
+        "RANGE": 0.80,
         "UNKNOWN": 0.75,
     },
 }
 
 KELLY_CONFIG = {
-    "enabled": False,   # keep disabled for weekend live validation
+    "enabled": False,
     "kelly_fraction": 0.25,
     "min_trades": 50,
     "min_mult": 0.5,

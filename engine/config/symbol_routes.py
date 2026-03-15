@@ -1,14 +1,4 @@
 SYMBOL_ROUTES = {
-    "ETHUSDT": {
-        "base": "WETH",
-        "solana": None,
-    },
-
-    "SOLUSDT": {
-        "base": None,
-        "solana": "SOL",
-    },
-
     "LINKUSDT": {
         "base": "LINK",
         "solana": None,
@@ -17,5 +7,10 @@ SYMBOL_ROUTES = {
     "AAVEUSDT": {
         "base": "AAVE",
         "solana": None,
+    },
+
+    "SOLUSDT": {
+        "base": None,
+        "solana": "SOL",
     },
 }
