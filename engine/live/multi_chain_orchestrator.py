@@ -149,7 +149,9 @@ class MultiChainOrchestrator:
         # key format: "{chain}:{symbol}" -> trade_id
         self.trade_ids: Dict[str, int] = {}
 
-        self.equity_peak = initial_equity
+        # breaker state is restored from strategy state when available
+        # default peak should be current equity baseline, not historical config equity
+        self.equity_peak = float(self.capital.equity)
         self.circuit_breaker_triggered = False
         self.circuit_breaker_time = None
 
@@ -286,6 +288,9 @@ class MultiChainOrchestrator:
                 "saved_at": int(time.time()),
                 "last_processed_candle": self.last_processed_candle,
                 "cooldown": self.cooldown,
+                "equity_peak": float(self.equity_peak),
+                "circuit_breaker_triggered": bool(self.circuit_breaker_triggered),
+                "circuit_breaker_time": self.circuit_breaker_time,
                 "routers": {},
             }
 
@@ -320,6 +325,27 @@ class MultiChainOrchestrator:
             self.last_processed_candle = data.get("last_processed_candle", {}) or {}
             self.cooldown = data.get("cooldown", {}) or {}
 
+            saved_equity_peak = data.get("equity_peak")
+            if saved_equity_peak is not None:
+                try:
+                    self.equity_peak = float(saved_equity_peak)
+                except Exception:
+                    self.equity_peak = float(self.capital.equity)
+            else:
+                self.equity_peak = float(self.capital.equity)
+
+            self.circuit_breaker_triggered = bool(
+                data.get("circuit_breaker_triggered", False)
+            )
+
+            saved_breaker_time = data.get("circuit_breaker_time")
+            try:
+                self.circuit_breaker_time = (
+                    float(saved_breaker_time) if saved_breaker_time is not None else None
+                )
+            except Exception:
+                self.circuit_breaker_time = None
+
             router_snaps = data.get("routers", {}) or {}
             restored = 0
 
@@ -329,11 +355,13 @@ class MultiChainOrchestrator:
                     router.from_snapshot(snap)
                     restored += 1
 
+            if self.capital.equity > self.equity_peak:
+                self.equity_peak = float(self.capital.equity)
+
             logger.info(f"[STATE LOAD] restored strategy state for {restored} symbols")
 
         except Exception as e:
             logger.error(f"[STATE LOAD ERROR] {e}")
-
     def _restore_open_trade_state(self) -> None:
         """
         Restores:
