@@ -78,3 +78,20 @@ research/**/data/raw/
 # -------------------------------------------------
 
 research/**/cache/
+
+
+strategy_state.json
+engine_state.json.bak
+engine_state.json.bak_local
+engine_state_legacy.json
+trades.db
+trades.db-shm
+trades.db-wal
+trades.db.bak
+trades_legacy.db
+python
+
+*.bak
+*.db
+*.db-shm
+*.db-wal

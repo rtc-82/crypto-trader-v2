@@ -830,10 +830,10 @@ class MultiChainOrchestrator:
                     logger.error(f"[CAPITAL CLOSE ERROR] {symbol} {chain}: {e}")
                     continue
 
-                r_mult = self.position_manager.r_multiple(
+                r_mult = self.position_manager.r_multiple_from_initial_risk(
                     entry_price=position.entry_price,
                     exit_price=exit_price,
-                    stop_loss=position.stop_loss,
+                    initial_risk=position.initial_risk,
                     direction=position.direction,
                 )
 
