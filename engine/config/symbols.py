@@ -1,5 +1,5 @@
 SCAN_SYMBOLS = [
-    "AAVEUSDT",
+  
     "SOLUSDT",
 ]
 
