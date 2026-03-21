@@ -1,18 +1,16 @@
-# engine/config/config.py
-
 STRATEGY_CONFIG = {
     # Trend / regime detection
     "ema_period": 50,
     "atr_period": 14,
-    "slope_threshold": 0.30,
-    "volatility_percentile_threshold": 0.60,
+    "slope_threshold": 0.40,
+    "volatility_percentile_threshold": 0.70,
     "adx_threshold": 30,
     "breakout_lookback": 16,
 
     # Mean reversion
     "bb_period": 40,
-    "z_entry": 1.6,
-    "max_atr_percentile_for_mr": 0.55,
+    "z_entry": 1.9,
+    "max_atr_percentile_for_mr": 0.40,
 }
 
 ENGINE_CONFIG = {
@@ -25,7 +23,9 @@ ENGINE_CONFIG = {
     "atr_stop_multiplier": 1.7,
     "risk_reward_ratio": 1.4,
     "trade_cooldown": 0,
-    "trade_cooldown_sec": 3600,  # 60 minutes after a close
+    "trade_cooldown_sec": 3600,
+    "loser_cooldown_sec": 7200,
+    "hard_loser_cooldown_sec": 21600,
     "invert_signals": True,
 
     # Safety
@@ -97,7 +97,7 @@ ENGINE_CONFIG = {
 GLOBAL_RISK_CONFIG = {
     "max_daily_loss_pct": ENGINE_CONFIG.get("daily_loss_limit_pct", 0.015),
     "max_trade_fraction": 0.08,
-    "max_trades_per_hour": 2,
+    "max_trades_per_hour": 1,
 }
 
 POSITION_CONFIG = {

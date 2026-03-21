@@ -134,10 +134,21 @@ class MultiChainOrchestrator:
             logger.info(f"[FEED] Creating feed for {s}")
             self.feeds[s] = BinanceCandleFeed(s, interval)
 
-        self.cooldown: Dict[str, float] = {}
+        self.cooldown: Dict[str, float] = {}  # stores cooldown-until timestamps
+
         self.cooldown_seconds = ENGINE_CONFIG.get(
             "trade_cooldown_sec",
             ENGINE_CONFIG.get("trade_cooldown", 600)
+        )
+
+        self.loser_cooldown_seconds = ENGINE_CONFIG.get(
+            "loser_cooldown_sec",
+            2 * 60 * 60
+        )
+
+        self.hard_loser_cooldown_seconds = ENGINE_CONFIG.get(
+            "hard_loser_cooldown_sec",
+            6 * 60 * 60
         )
 
         self._liq_cache: Dict[str, Tuple[float, bool]] = {}
@@ -806,7 +817,9 @@ class MultiChainOrchestrator:
             successful_close_chains = []
             failed_close_chains = []
 
-            for chain, result in close_results:
+            closed_r_multiples = []
+
+            for chain, result in close_results.items():
                 if self._extract_success(result):
                     successful_close_chains.append(chain)
                 else:
@@ -837,6 +850,8 @@ class MultiChainOrchestrator:
                     direction=position.direction,
                 )
 
+                closed_r_multiples.append(float(r_mult))
+
                 if trade_id is not None:
                     try:
                         self.trade_logger.log_exit(
@@ -859,13 +874,27 @@ class MultiChainOrchestrator:
 
             if not self._has_any_chain_position(symbol):
                 self.position_manager.close_position(symbol)
-                self.cooldown[symbol] = time.time()
+
+                avg_r = sum(closed_r_multiples) / len(closed_r_multiples) if closed_r_multiples else 0.0
+
+                if avg_r <= -0.75:
+                    cooldown_sec = self.hard_loser_cooldown_seconds
+                elif avg_r < 0:
+                    cooldown_sec = self.loser_cooldown_seconds
+                else:
+                    cooldown_sec = self.cooldown_seconds
+
+                self.cooldown[symbol] = time.time() + cooldown_sec
+
+                logger.info(
+                    f"[COOLDOWN SET] symbol={symbol} avg_r={avg_r:.4f} cooldown_sec={cooldown_sec}"
+                )
 
                 self.send_telegram(
                     f"✅ Trade Closed"
                     f"\nSymbol: {symbol}"
                     f"\nExit: {exit_price:.6f}"
-                    f"\nClosed chains: {','.join(successful_close_chains)}"
+                    f"\nClosed chains: {', '.join(successful_close_chains)}"
                     + self._telegram_status_suffix()
                 )
             else:
@@ -878,7 +907,7 @@ class MultiChainOrchestrator:
                 try:
                     self.capital.mark_to_market(latest_prices)
                 except Exception as e:
-                    logger.error(f"[POST EXIT MTM ERROR] {symbol}: {e}")
+                    logger.error(f"[POST EXIT MTM ERROR] {symbol}: {e}")  
 
     async def run(self):
 
@@ -988,8 +1017,10 @@ class MultiChainOrchestrator:
                         self._log_entry_skip(symbol, "max_positions_reached")
                         break
 
-                    if symbol in self.cooldown and time.time() - self.cooldown[symbol] < self.cooldown_seconds:
-                        remaining = self.cooldown_seconds - (time.time() - self.cooldown[symbol])
+                    cooldown_until = self.cooldown.get(symbol)
+
+                    if cooldown_until and time.time() < cooldown_until:
+                        remaining = cooldown_until - time.time()
                         self._log_entry_skip(symbol, "cooldown", f"remaining_sec={remaining:.2f}")
                         continue
 
@@ -1211,9 +1242,8 @@ class MultiChainOrchestrator:
                                 f"[CAPITAL ERROR] failed to open accounting position for {symbol} on {chain}: {e}"
                             )
 
-                    self.global_risk.on_trade_executed()
+                    self.cooldown[symbol] = time.time() + self.cooldown_seconds
 
-                    self.cooldown[symbol] = time.time()
 
                     self.position_manager.open_position(
                         symbol=symbol,
