@@ -151,6 +151,8 @@ class MultiChainOrchestrator:
             6 * 60 * 60
         )
 
+        self.max_hold_seconds = ENGINE_CONFIG.get("max_hold_seconds", 43200)
+
         self._liq_cache: Dict[str, Tuple[float, bool]] = {}
         self._liq_ttl_sec = ENGINE_CONFIG.get("liquidity_ttl_sec", 300)
 
@@ -759,15 +761,22 @@ class MultiChainOrchestrator:
             pre_snapshot = self.position_manager.diagnostic_snapshot(symbol)
             open_chains = self._get_open_chains_for_symbol(symbol)
 
-            try:
-                exit_decision = self.position_manager.check_exit(
-                    symbol=symbol,
-                    high=float(candle["high"]),
-                    low=float(candle["low"]),
+            if time_exit is not None:
+                exit_decision = time_exit
+                logger.info(
+                    f"[TIME EXIT] symbol={symbol} held_sec={time_exit['held_seconds']:.0f} "
+                    f"exit_price={time_exit['exit_price']:.6f}"
                 )
-            except Exception as e:
-                logger.error(f"[EXIT CHECK ERROR] {symbol}: {e}")
-                continue
+            else:
+                try:
+                    exit_decision = self.position_manager.check_exit(
+                        symbol=symbol,
+                        high=float(candle["high"]),
+                        low=float(candle["low"]),
+                    )
+                except Exception as e:
+                    logger.error(f"[EXIT CHECK ERROR] {symbol}: {e}")
+                    continue
 
             self._log_exit_state(
                 symbol=symbol,
@@ -783,6 +792,21 @@ class MultiChainOrchestrator:
             position = exit_decision["position"]
             exit_price = float(exit_decision["exit_price"])
             close_direction = self._opposite_direction(position.direction)
+
+            position_obj = self.position_manager.positions.get(symbol)
+            time_exit = None
+
+            if position_obj is not None:
+                entry_ts = getattr(position_obj, "entry_ts", None)
+                if entry_ts:
+                    held_seconds = time.time() - float(entry_ts)
+                    if held_seconds >= self.max_hold_seconds:
+                        time_exit = {
+                            "position": position_obj,
+                            "exit_price": float(candle["close"]),
+                            "result": "time_exit",
+                            "held_seconds": held_seconds,
+                        }
 
             routes = SYMBOL_ROUTES.get(symbol, {})
             open_chains = self._get_open_chains_for_symbol(symbol)
@@ -816,6 +840,13 @@ class MultiChainOrchestrator:
 
             successful_close_chains = []
             failed_close_chains = []
+            closed_r_multiples = []
+
+            for chain, result in close_results:
+                if self._extract_success(result):
+                    successful_close_chains.append(chain)
+                else:
+                    failed_close_chains.append(chain)
 
             closed_r_multiples = []
 

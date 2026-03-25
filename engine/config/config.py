@@ -18,6 +18,7 @@ ENGINE_CONFIG = {
     "starting_equity": 75.0,
     "loop_interval": 5,
     "portfolio_base_risk_pct": 0.0050,
+    
 
     # Trade mechanics
     "atr_stop_multiplier": 1.7,
@@ -26,6 +27,7 @@ ENGINE_CONFIG = {
     "trade_cooldown_sec": 3600,
     "loser_cooldown_sec": 7200,
     "hard_loser_cooldown_sec": 21600,
+    "max_hold_seconds": 43200,
     "invert_signals": True,
 
     # Safety
