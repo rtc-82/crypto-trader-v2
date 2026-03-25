@@ -754,7 +754,7 @@ class MultiChainOrchestrator:
         logger.error(f"[EXECUTOR] {label} failed")
         return None
 
-    async def _process_exits(self, candle_map: Dict[str, Any], latest_prices: Dict[str, float]) -> None:
+        async def _process_exits(self, candle_map: Dict[str, Any], latest_prices: Dict[str, float]) -> None:
         open_symbols = list(self.position_manager.open_symbols())
 
         for symbol in open_symbols:
