@@ -215,7 +215,37 @@ class MultiChainOrchestrator:
     def _extract_success(self, result) -> bool:
         if result is None:
             return False
-        return bool(getattr(result, "success", False))
+
+        if isinstance(result, bool):
+            return result
+
+        if isinstance(result, dict):
+            if "success" in result:
+                return bool(result.get("success"))
+
+            status = str(result.get("status", "")).strip().lower()
+            return status in {
+                "success",
+                "succeeded",
+                "filled",
+                "ok",
+                "confirmed",
+                "completed",
+            }
+
+        success = getattr(result, "success", None)
+        if success is not None:
+            return bool(success)
+
+        status = str(getattr(result, "status", "")).strip().lower()
+        return status in {
+            "success",
+            "succeeded",
+            "filled",
+            "ok",
+            "confirmed",
+            "completed",
+        }
 
     def _extract_executed_size(self, result, fallback_size: float) -> float:
         if result is None:
@@ -382,6 +412,10 @@ class MultiChainOrchestrator:
         - trade_ids per (chain, symbol)
         - symbol-level logical positions in PositionManager from open DB rows
         """
+        restored_capital = 0
+        restored_trade_ids = 0
+        restored_logical = 0
+
         try:
             rows = self.trade_logger.get_open_trades()
         except Exception as e:
@@ -397,6 +431,7 @@ class MultiChainOrchestrator:
                 continue
 
             self.trade_ids[self._trade_key(chain, symbol)] = int(trade_id)
+            restored_trade_ids += 1
 
             bucket = grouped.setdefault(symbol, {
                 "direction": direction,
@@ -405,6 +440,31 @@ class MultiChainOrchestrator:
                 "size": 0.0,
                 "entry_ts": int(ts_open),
             })
+
+            if (
+                chain
+                and symbol
+                and entry_price > 0
+                and size > 0
+                and not self.capital.has_position(chain, symbol)
+            ):
+                try:
+                    self.capital.open_position(
+                        chain=chain,
+                        symbol=symbol,
+                        direction=direction,
+                        entry_price=entry_price,
+                        size=size,
+                    )
+                    restored_capital += 1
+                except ValueError:
+                    pass
+                except Exception:
+                    logger.exception(
+                        "[RESTORE] failed to rebuild capital position chain=%s symbol=%s",
+                        chain,
+                        symbol,
+                    )
 
             bucket["size"] += float(size)
 
@@ -421,6 +481,7 @@ class MultiChainOrchestrator:
                     atr=max(float(data["atr"]), 1e-9),
                     entry_ts=int(data["entry_ts"]),
                 )
+                restored_logical += 1
                 logger.info(
                     f"[RECOVERY] restored in-memory position for {symbol} "
                     f"entry_ts={int(data['entry_ts'])}"
@@ -428,6 +489,13 @@ class MultiChainOrchestrator:
             except Exception as e:
                 logger.error(f"[RECOVERY] failed to restore position for {symbol}: {e}")
 
+        logger.info(
+            "[RESTORE] restored_trade_ids=%s restored_logical=%s restored_capital=%s",
+            restored_trade_ids,
+            restored_logical,
+            restored_capital,
+        )
+            
     def _log_exit_state(
         self,
         symbol: str,
