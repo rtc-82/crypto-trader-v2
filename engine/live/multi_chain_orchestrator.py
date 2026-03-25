@@ -754,187 +754,187 @@ class MultiChainOrchestrator:
         logger.error(f"[EXECUTOR] {label} failed")
         return None
 
-async def _process_exits(self, candle_map: Dict[str, Any], latest_prices: Dict[str, float]) -> None:
-    open_symbols = list(self.position_manager.open_symbols())
+    async def _process_exits(self, candle_map: Dict[str, Any], latest_prices: Dict[str, float]) -> None:
+        open_symbols = list(self.position_manager.open_symbols())
 
-    for symbol in open_symbols:
-        candle = candle_map.get(symbol)
-        if not candle:
-            continue
-
-        pre_snapshot = self.position_manager.diagnostic_snapshot(symbol)
-        open_chains = self._get_open_chains_for_symbol(symbol)
-
-        position_obj = self.position_manager.positions.get(symbol)
-        time_exit = None
-
-        if position_obj is not None:
-            entry_ts = getattr(position_obj, "entry_ts", None)
-            if entry_ts:
-                held_seconds = time.time() - float(entry_ts)
-                if held_seconds >= self.max_hold_seconds:
-                    time_exit = {
-                        "position": position_obj,
-                        "exit_price": float(candle["close"]),
-                        "result": "time_exit",
-                        "held_seconds": held_seconds,
-                    }
-
-        if time_exit is not None:
-            exit_decision = time_exit
-            logger.info(
-                f"[TIME EXIT] symbol={symbol} held_sec={time_exit['held_seconds']:.0f} "
-                f"exit_price={time_exit['exit_price']:.6f}"
-            )
-        else:
-            try:
-                exit_decision = self.position_manager.check_exit(
-                    symbol=symbol,
-                    high=float(candle["high"]),
-                    low=float(candle["low"]),
-                )
-            except Exception as e:
-                logger.error(f"[EXIT CHECK ERROR] {symbol}: {e}")
+        for symbol in open_symbols:
+            candle = candle_map.get(symbol)
+            if not candle:
                 continue
 
-        self._log_exit_state(
-            symbol=symbol,
-            candle=candle,
-            pre_snapshot=pre_snapshot,
-            exit_decision=exit_decision,
-            open_chains=open_chains,
-        )
+            pre_snapshot = self.position_manager.diagnostic_snapshot(symbol)
+            open_chains = self._get_open_chains_for_symbol(symbol)
 
-        if not exit_decision:
-            continue
+            position_obj = self.position_manager.positions.get(symbol)
+            time_exit = None
 
-        position = exit_decision["position"]
-        exit_price = float(exit_decision["exit_price"])
-        close_direction = self._opposite_direction(position.direction)
+            if position_obj is not None:
+                entry_ts = getattr(position_obj, "entry_ts", None)
+                if entry_ts:
+                    held_seconds = time.time() - float(entry_ts)
+                    if held_seconds >= self.max_hold_seconds:
+                        time_exit = {
+                            "position": position_obj,
+                            "exit_price": float(candle["close"]),
+                            "result": "time_exit",
+                            "held_seconds": held_seconds,
+                        }
 
-        routes = SYMBOL_ROUTES.get(symbol, {})
-        open_chains = self._get_open_chains_for_symbol(symbol)
-
-        if not open_chains:
-            logger.warning(f"[EXIT] no accounting chains found for {symbol}; closing logical position only")
-            self.position_manager.close_position(symbol)
-            continue
-
-        async def close_chain(chain: str):
-            token = routes.get(chain)
-            accounting_pos = self.capital.get_position(chain, symbol)
-
-            if not token or accounting_pos is None:
-                return chain, None
-
-            async def call():
-                executor = self.executors[chain]
-                return await executor.execute_trade(
-                    symbol=token,
-                    direction=close_direction,
-                    size=float(accounting_pos.size),
+            if time_exit is not None:
+                exit_decision = time_exit
+                logger.info(
+                    f"[TIME EXIT] symbol={symbol} held_sec={time_exit['held_seconds']:.0f} "
+                    f"exit_price={time_exit['exit_price']:.6f}"
                 )
-
-            result = await self._with_retry(call, f"close {symbol} {chain}")
-            return chain, result
-
-        close_results = await asyncio.gather(*[
-            close_chain(chain) for chain in open_chains
-        ])
-
-        successful_close_chains = []
-        failed_close_chains = []
-        closed_r_multiples = []
-
-        for chain, result in close_results:
-            if self._extract_success(result):
-                successful_close_chains.append(chain)
             else:
-                failed_close_chains.append(chain)
-
-        if not successful_close_chains:
-            logger.warning(f"[EXIT FAILED] {symbol} no close legs succeeded")
-            continue
-
-        for chain in successful_close_chains:
-            trade_key = self._trade_key(chain, symbol)
-            trade_id = self.trade_ids.get(trade_key)
-
-            try:
-                pnl = self.capital.close_position(
-                    chain=chain,
-                    symbol=symbol,
-                    exit_price=exit_price,
-                )
-            except Exception as e:
-                logger.error(f"[CAPITAL CLOSE ERROR] {symbol} {chain}: {e}")
-                continue
-
-            r_mult = self.position_manager.r_multiple_from_initial_risk(
-                entry_price=position.entry_price,
-                exit_price=exit_price,
-                initial_risk=position.initial_risk,
-                direction=position.direction,
-            )
-
-            closed_r_multiples.append(float(r_mult))
-
-            if trade_id is not None:
                 try:
-                    self.trade_logger.log_exit(
-                        trade_id=trade_id,
-                        exit_price=exit_price,
-                        r_multiple=r_mult,
-                        ts_close=int(time.time()),
+                    exit_decision = self.position_manager.check_exit(
+                        symbol=symbol,
+                        high=float(candle["high"]),
+                        low=float(candle["low"]),
                     )
                 except Exception as e:
-                    logger.error(f"[TRADE EXIT LOGGER ERROR] {symbol} {chain}: {e}")
+                    logger.error(f"[EXIT CHECK ERROR] {symbol}: {e}")
+                    continue
+
+            self._log_exit_state(
+                symbol=symbol,
+                candle=candle,
+                pre_snapshot=pre_snapshot,
+                exit_decision=exit_decision,
+                open_chains=open_chains,
+            )
+
+            if not exit_decision:
+                continue
+
+            position = exit_decision["position"]
+            exit_price = float(exit_decision["exit_price"])
+            close_direction = self._opposite_direction(position.direction)
+
+            routes = SYMBOL_ROUTES.get(symbol, {})
+            open_chains = self._get_open_chains_for_symbol(symbol)
+
+            if not open_chains:
+                logger.warning(f"[EXIT] no accounting chains found for {symbol}; closing logical position only")
+                self.position_manager.close_position(symbol)
+                continue
+
+            async def close_chain(chain: str):
+                token = routes.get(chain)
+                accounting_pos = self.capital.get_position(chain, symbol)
+
+                if not token or accounting_pos is None:
+                    return chain, None
+
+                async def call():
+                    executor = self.executors[chain]
+                    return await executor.execute_trade(
+                        symbol=token,
+                        direction=close_direction,
+                        size=float(accounting_pos.size),
+                    )
+
+                result = await self._with_retry(call, f"close {symbol} {chain}")
+                return chain, result
+
+            close_results = await asyncio.gather(*[
+                close_chain(chain) for chain in open_chains
+            ])
+
+            successful_close_chains = []
+            failed_close_chains = []
+            closed_r_multiples = []
+
+            for chain, result in close_results:
+                if self._extract_success(result):
+                    successful_close_chains.append(chain)
+                else:
+                    failed_close_chains.append(chain)
+
+            if not successful_close_chains:
+                logger.warning(f"[EXIT FAILED] {symbol} no close legs succeeded")
+                continue
+
+            for chain in successful_close_chains:
+                trade_key = self._trade_key(chain, symbol)
+                trade_id = self.trade_ids.get(trade_key)
+
+                try:
+                    pnl = self.capital.close_position(
+                        chain=chain,
+                        symbol=symbol,
+                        exit_price=exit_price,
+                    )
+                except Exception as e:
+                    logger.error(f"[CAPITAL CLOSE ERROR] {symbol} {chain}: {e}")
+                    continue
+
+                r_mult = self.position_manager.r_multiple_from_initial_risk(
+                    entry_price=position.entry_price,
+                    exit_price=exit_price,
+                    initial_risk=position.initial_risk,
+                    direction=position.direction,
+                )
+
+                closed_r_multiples.append(float(r_mult))
+
+                if trade_id is not None:
+                    try:
+                        self.trade_logger.log_exit(
+                            trade_id=trade_id,
+                            exit_price=exit_price,
+                            r_multiple=r_mult,
+                            ts_close=int(time.time()),
+                        )
+                    except Exception as e:
+                        logger.error(f"[TRADE EXIT LOGGER ERROR] {symbol} {chain}: {e}")
+                else:
+                    logger.warning(f"[TRADE ID MISSING] could not log exit for {chain}:{symbol}")
+
+                self.trade_ids.pop(trade_key, None)
+
+                logger.info(
+                    f"[TRADE CLOSED] symbol={symbol} chain={chain} direction={position.direction} "
+                    f"exit_price={exit_price} pnl={pnl:.6f} r={r_mult:.4f}"
+                )
+
+            if not self._has_any_chain_position(symbol):
+                self.position_manager.close_position(symbol)
+
+                avg_r = sum(closed_r_multiples) / len(closed_r_multiples) if closed_r_multiples else 0.0
+
+                if avg_r <= -0.75:
+                    cooldown_sec = self.hard_loser_cooldown_seconds
+                elif avg_r < 0:
+                    cooldown_sec = self.loser_cooldown_seconds
+                else:
+                    cooldown_sec = self.cooldown_seconds
+
+                self.cooldown[symbol] = time.time() + cooldown_sec
+
+                logger.info(
+                    f"[COOLDOWN SET] symbol={symbol} avg_r={avg_r:.4f} cooldown_sec={cooldown_sec}"
+                )
+
+                self.send_telegram(
+                    f"✅ Trade Closed"
+                    f"\nSymbol: {symbol}"
+                    f"\nExit: {exit_price:.6f}"
+                    f"\nClosed chains: {', '.join(successful_close_chains)}"
+                    + self._telegram_status_suffix()
+                )
             else:
-                logger.warning(f"[TRADE ID MISSING] could not log exit for {chain}:{symbol}")
+                logger.warning(
+                    f"[PARTIAL EXIT] symbol={symbol} closed_chains={successful_close_chains} "
+                    f"failed_chains={failed_close_chains}"
+                )
 
-            self.trade_ids.pop(trade_key, None)
-
-            logger.info(
-                f"[TRADE CLOSED] symbol={symbol} chain={chain} direction={position.direction} "
-                f"exit_price={exit_price} pnl={pnl:.6f} r={r_mult:.4f}"
-            )
-
-        if not self._has_any_chain_position(symbol):
-            self.position_manager.close_position(symbol)
-
-            avg_r = sum(closed_r_multiples) / len(closed_r_multiples) if closed_r_multiples else 0.0
-
-            if avg_r <= -0.75:
-                cooldown_sec = self.hard_loser_cooldown_seconds
-            elif avg_r < 0:
-                cooldown_sec = self.loser_cooldown_seconds
-            else:
-                cooldown_sec = self.cooldown_seconds
-
-            self.cooldown[symbol] = time.time() + cooldown_sec
-
-            logger.info(
-                f"[COOLDOWN SET] symbol={symbol} avg_r={avg_r:.4f} cooldown_sec={cooldown_sec}"
-            )
-
-            self.send_telegram(
-                f"✅ Trade Closed"
-                f"\nSymbol: {symbol}"
-                f"\nExit: {exit_price:.6f}"
-                f"\nClosed chains: {', '.join(successful_close_chains)}"
-                + self._telegram_status_suffix()
-            )
-        else:
-            logger.warning(
-                f"[PARTIAL EXIT] symbol={symbol} closed_chains={successful_close_chains} "
-                f"failed_chains={failed_close_chains}"
-            )
-
-        if latest_prices:
-            try:
-                self.capital.mark_to_market(latest_prices)
-            except Exception as e:
-                logger.error(f"[POST EXIT MTM ERROR] {symbol}: {e}")
+            if latest_prices:
+                try:
+                    self.capital.mark_to_market(latest_prices)
+                except Exception as e:
+                    logger.error(f"[POST EXIT MTM ERROR] {symbol}: {e}")
 
     async def run(self):
 
