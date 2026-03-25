@@ -375,6 +375,7 @@ class MultiChainOrchestrator:
 
         except Exception as e:
             logger.error(f"[STATE LOAD ERROR] {e}")
+
     def _restore_open_trade_state(self) -> None:
         """
         Restores:
@@ -420,7 +421,10 @@ class MultiChainOrchestrator:
                     atr=max(float(data["atr"]), 1e-9),
                     entry_ts=int(data["entry_ts"]),
                 )
-                logger.info(f"[RECOVERY] restored in-memory position for {symbol}")
+                logger.info(
+                    f"[RECOVERY] restored in-memory position for {symbol} "
+                    f"entry_ts={int(data['entry_ts'])}"
+                )
             except Exception as e:
                 logger.error(f"[RECOVERY] failed to restore position for {symbol}: {e}")
 
@@ -761,6 +765,21 @@ class MultiChainOrchestrator:
             pre_snapshot = self.position_manager.diagnostic_snapshot(symbol)
             open_chains = self._get_open_chains_for_symbol(symbol)
 
+            position_obj = self.position_manager.positions.get(symbol)
+            time_exit = None
+
+            if position_obj is not None:
+                entry_ts = getattr(position_obj, "entry_ts", None)
+                if entry_ts:
+                    held_seconds = time.time() - float(entry_ts)
+                    if held_seconds >= self.max_hold_seconds:
+                        time_exit = {
+                            "position": position_obj,
+                            "exit_price": float(candle["close"]),
+                            "result": "time_exit",
+                            "held_seconds": held_seconds,
+                        }
+
             if time_exit is not None:
                 exit_decision = time_exit
                 logger.info(
@@ -792,21 +811,6 @@ class MultiChainOrchestrator:
             position = exit_decision["position"]
             exit_price = float(exit_decision["exit_price"])
             close_direction = self._opposite_direction(position.direction)
-
-            position_obj = self.position_manager.positions.get(symbol)
-            time_exit = None
-
-            if position_obj is not None:
-                entry_ts = getattr(position_obj, "entry_ts", None)
-                if entry_ts:
-                    held_seconds = time.time() - float(entry_ts)
-                    if held_seconds >= self.max_hold_seconds:
-                        time_exit = {
-                            "position": position_obj,
-                            "exit_price": float(candle["close"]),
-                            "result": "time_exit",
-                            "held_seconds": held_seconds,
-                        }
 
             routes = SYMBOL_ROUTES.get(symbol, {})
             open_chains = self._get_open_chains_for_symbol(symbol)
@@ -843,14 +847,6 @@ class MultiChainOrchestrator:
             closed_r_multiples = []
 
             for chain, result in close_results:
-                if self._extract_success(result):
-                    successful_close_chains.append(chain)
-                else:
-                    failed_close_chains.append(chain)
-
-            closed_r_multiples = []
-
-            for chain, result in close_results.items():
                 if self._extract_success(result):
                     successful_close_chains.append(chain)
                 else:
@@ -938,7 +934,7 @@ class MultiChainOrchestrator:
                 try:
                     self.capital.mark_to_market(latest_prices)
                 except Exception as e:
-                    logger.error(f"[POST EXIT MTM ERROR] {symbol}: {e}")  
+                    logger.error(f"[POST EXIT MTM ERROR] {symbol}: {e}")
 
     async def run(self):
 
@@ -1274,7 +1270,6 @@ class MultiChainOrchestrator:
                             )
 
                     self.cooldown[symbol] = time.time() + self.cooldown_seconds
-
 
                     self.position_manager.open_position(
                         symbol=symbol,
