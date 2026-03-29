@@ -15,7 +15,7 @@ from engine.config.symbols import SYMBOLS
 
 INITIAL_EQUITY = ENGINE_CONFIG.get("starting_equity", 1000.0)
 BINANCE_SYMBOLS = SYMBOLS
-BINANCE_INTERVAL = "5m"
+BINANCE_INTERVAL = "1h"
 LOOP_INTERVAL = ENGINE_CONFIG.get("loop_interval", 10)
 MAX_DRAWDOWN = ENGINE_CONFIG.get("portfolio_circuit_breaker_dd", 0.20)
 

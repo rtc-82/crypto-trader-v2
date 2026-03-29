@@ -1,34 +1,33 @@
 STRATEGY_CONFIG = {
-    # Trend / regime detection
-    "ema_period": 50,
+    # Conservative V2 trend / breakout profile
+    "ema_period": 100,
     "atr_period": 14,
-    "slope_threshold": 0.40,
-    "volatility_percentile_threshold": 0.70,
-    "adx_threshold": 30,
-    "breakout_lookback": 16,
+    "slope_threshold": 0.60,
+    "volatility_percentile_threshold": 0.80,
+    "adx_threshold": 32,
+    "breakout_lookback": 48,
 
-    # Mean reversion
+    # Mean reversion effectively disabled for V2
     "bb_period": 40,
-    "z_entry": 1.9,
-    "max_atr_percentile_for_mr": 0.40,
+    "z_entry": 99.0,
+    "max_atr_percentile_for_mr": 0.0,
 }
 
 ENGINE_CONFIG = {
     # Portfolio / runtime
     "starting_equity": 75.0,
     "loop_interval": 5,
-    "portfolio_base_risk_pct": 0.0050,
-    
+    "portfolio_base_risk_pct": 0.0040,
 
     # Trade mechanics
-    "atr_stop_multiplier": 1.7,
-    "risk_reward_ratio": 1.4,
+    "atr_stop_multiplier": 2.0,
+    "risk_reward_ratio": 2.0,
     "trade_cooldown": 0,
-    "trade_cooldown_sec": 3600,
-    "loser_cooldown_sec": 7200,
-    "hard_loser_cooldown_sec": 21600,
-    "max_hold_seconds": 43200,
-    "invert_signals": True,
+    "trade_cooldown_sec": 14400,       # 4h
+    "loser_cooldown_sec": 43200,       # 12h
+    "hard_loser_cooldown_sec": 86400,  # 24h
+    "max_hold_seconds": 259200,        # 72h
+    "invert_signals": False,
 
     # Safety
     "daily_loss_limit_pct": 0.015,
@@ -43,9 +42,9 @@ ENGINE_CONFIG = {
     # Portfolio controls
     "score_lookback_trades": 120,
     "max_concurrent_positions": 1,
-    "correlation_threshold": 0.62,
-    "correlation_lookback_bars": 200,
-    "correlation_min_bars": 80,
+    "correlation_threshold": 0.72,
+    "correlation_lookback_bars": 250,
+    "correlation_min_bars": 100,
     "phase_switch_equity": 200.0,
 
     # Friction model
@@ -98,7 +97,7 @@ ENGINE_CONFIG = {
 
 GLOBAL_RISK_CONFIG = {
     "max_daily_loss_pct": ENGINE_CONFIG.get("daily_loss_limit_pct", 0.015),
-    "max_trade_fraction": 0.08,
+    "max_trade_fraction": 0.05,
     "max_trades_per_hour": 1,
 }
 
@@ -109,38 +108,38 @@ POSITION_CONFIG = {
 }
 
 SIGNAL_RANKING_CONFIG = {
-    "w_slope": 0.65,
-    "w_vol": 0.35,
+    "w_slope": 0.70,
+    "w_vol": 0.30,
     "require_meta": False,
 }
 
 UNIVERSE_CONFIG = {
     "refresh_interval_minutes": 240,
-    "universe_size": 3,
+    "universe_size": 1,
 }
 
 RISK_SCALING_CONFIG = {
     "enabled": True,
-    "min_mult": 0.50,
-    "max_mult": 1.10,
+    "min_mult": 0.40,
+    "max_mult": 1.05,
     "slope": {
-        "low": 0.10,
-        "high": 0.30,
-        "low_mult": 0.80,
-        "high_mult": 1.05,
+        "low": 0.25,
+        "high": 0.60,
+        "low_mult": 0.85,
+        "high_mult": 1.00,
     },
     "vol": {
-        "low": 0.50,
-        "high": 0.80,
-        "low_mult": 0.85,
-        "high_mult": 1.05,
+        "low": 0.60,
+        "high": 0.90,
+        "low_mult": 0.80,
+        "high_mult": 1.00,
     },
     "regime_mult": {
-        "TRENDING": 1.05,
-        "COMPRESSION": 0.80,
-        "NEUTRAL": 0.70,
-        "RANGE": 0.80,
-        "UNKNOWN": 0.75,
+        "TRENDING": 1.00,
+        "COMPRESSION": 0.25,
+        "NEUTRAL": 0.30,
+        "RANGE": 0.40,
+        "UNKNOWN": 0.40,
     },
 }
 
