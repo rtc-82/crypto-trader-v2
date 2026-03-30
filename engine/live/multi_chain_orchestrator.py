@@ -1184,9 +1184,21 @@ class MultiChainOrchestrator:
                 symbol = best.symbol
                 direction = best.signal.direction
                 atr = best.signal.atr
-                if direction == "SHORT" and not ENGINE_CONFIG.get("allow_shorts", False):
+                direction = str(direction).upper()
+
+                if direction == "SHORT":
                     self._flush_entry_skip_summary()
-                    logger.info(f"[DIRECTION BLOCK] shorts disabled symbol={symbol}")
+                    logger.warning(
+                        f"[SHORT BLOCK] symbol={symbol} direction={direction} "
+                        f"strategy is running in long-only mode"
+                    )
+                    self.send_telegram(
+                        f"🛑 SHORT blocked"
+                        f"\nSymbol: {symbol}"
+                        f"\nDirection: {direction}"
+                        f"\nMode: long-only"
+                        + self._telegram_status_suffix()
+                    )
                     await asyncio.sleep(self.loop_interval)
                     continue
 
