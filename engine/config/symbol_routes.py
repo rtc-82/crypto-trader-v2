@@ -3,8 +3,4 @@ SYMBOL_ROUTES = {
         "base": "AAVE",
         "solana": None,
     },
-    "SOLUSDT": {
-        "base": None,
-        "solana": "SOL",
-    },
 }

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import logging
+from typing import Optional
 from web3 import Web3
 
 SWAP_ROUTER = Web3.to_checksum_address("0x2626664c2603336E57B271c5C0b26F421741e481")
@@ -9,7 +10,6 @@ SWAP_ROUTER = Web3.to_checksum_address("0x2626664c2603336E57B271c5C0b26F421741e4
 WETH = Web3.to_checksum_address("0x4200000000000000000000000000000000000006")
 USDC = Web3.to_checksum_address("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913")
 
-# Minimal ABI for exactInputSingle
 ROUTER_ABI = [
     {
         "inputs": [
@@ -39,12 +39,7 @@ ROUTER_ABI = [
 
 class UniswapV3Router:
     """
-    Builds SwapRouter exactInputSingle txs (Uniswap V3).
-
-    Notes:
-    - Default behavior does NOT estimate gas at build time.
-      Gas estimation will often revert if you have no allowance/balance yet.
-    - Uses Web3 v6+ compatible calldata encoding.
+    Generic exactInputSingle tx builder.
     """
 
     def __init__(self, provider, logger: logging.Logger, fee: int = 3000):
@@ -65,21 +60,22 @@ class UniswapV3Router:
         value_wei: int = 0,
         gas_limit: int = 300_000,
         try_estimate_gas: bool = False,
+        fee: Optional[int] = None,
     ) -> dict:
+        swap_fee = int(self.fee if fee is None else fee)
         deadline = int(time.time()) + int(deadline_seconds)
 
         params = (
             Web3.to_checksum_address(token_in),
             Web3.to_checksum_address(token_out),
-            self.fee,
+            swap_fee,
             Web3.to_checksum_address(recipient),
             deadline,
             int(amount_in),
             int(min_out),
-            0,  # sqrtPriceLimitX96 (0 = no limit)
+            0,
         )
 
-        # Web3 v6+ compatible encoding (no encodeABI on Contract)
         data = self.contract.functions.exactInputSingle(params)._encode_transaction_data()
 
         tx: dict = {
@@ -89,25 +85,25 @@ class UniswapV3Router:
             "value": int(value_wei),
             "nonce": self.provider.get_nonce(),
             "chainId": self.provider.chain_id,
-            "gas": int(gas_limit),  # placeholder unless estimate succeeds
+            "gas": int(gas_limit),
         }
 
-        # Fees: EIP-1559 preferred, fallback to legacy gasPrice
         try:
             fees = self.provider.get_eip1559_fees()
             tx.update(fees)
         except Exception:
             tx["gasPrice"] = self.provider.get_gas_price_wei()
 
-        # Optional gas estimate (only after funding + approvals)
         if try_estimate_gas:
             try:
                 est = self.w3.eth.estimate_gas(tx)
                 tx["gas"] = int(est)
-                self.logger.info(f"Gas estimated successfully: {est}")
+                self.logger.info("Gas estimated successfully: %s", est)
             except Exception as e:
                 self.logger.warning(
-                    f"Gas estimation failed (using placeholder {gas_limit}): {e}"
+                    "Gas estimation failed (using placeholder %s): %s",
+                    gas_limit,
+                    e,
                 )
 
         return tx

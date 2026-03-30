@@ -275,14 +275,14 @@ class MultiChainOrchestrator:
         if result is None:
             return None
 
-        for attr in ("tx_hash", "transaction_hash", "hash"):
+        for attr in ("tx_id", "tx_hash", "transaction_hash", "hash"):
             if hasattr(result, attr):
                 value = getattr(result, attr)
                 if value:
                     return str(value)
 
         if isinstance(result, dict):
-            for key in ("tx_hash", "transaction_hash", "hash"):
+            for key in ("tx_id", "tx_hash", "transaction_hash", "hash"):
                 value = result.get(key)
                 if value:
                     return str(value)
@@ -1184,6 +1184,11 @@ class MultiChainOrchestrator:
                 symbol = best.symbol
                 direction = best.signal.direction
                 atr = best.signal.atr
+                if direction == "SHORT" and not ENGINE_CONFIG.get("allow_shorts", False):
+                    self._flush_entry_skip_summary()
+                    logger.info(f"[DIRECTION BLOCK] shorts disabled symbol={symbol}")
+                    await asyncio.sleep(self.loop_interval)
+                    continue
 
                 price = next(
                     (c["price"] for c in candidates if c["symbol"] == symbol),

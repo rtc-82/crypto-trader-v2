@@ -28,6 +28,7 @@ ENGINE_CONFIG = {
     "hard_loser_cooldown_sec": 86400,  # 24h
     "max_hold_seconds": 259200,        # 72h
     "invert_signals": False,
+    "allow_shorts": False,
 
     # Safety
     "daily_loss_limit_pct": 0.015,

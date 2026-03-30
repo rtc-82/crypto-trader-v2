@@ -1,7 +1,5 @@
 SCAN_SYMBOLS = [
-    # Conservative V2 rollout:
-    # keep only symbols that have a confirmed execution route.
-    "SOLUSDT",
+    "AAVEUSDT",
 ]
 
 EXECUTION_CANDIDATES = SCAN_SYMBOLS

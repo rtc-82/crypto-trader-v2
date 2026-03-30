@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Dict, Tuple, Any
 from web3 import Web3
 import logging
 
@@ -8,13 +9,7 @@ UNISWAP_V3_FACTORY = Web3.to_checksum_address(
     "0x33128a8fC17869897dcE68Ed026d694621f6FDfD"
 )
 
-WETH = Web3.to_checksum_address(
-    "0x4200000000000000000000000000000000000006"
-)
-
-USDC = Web3.to_checksum_address(
-    "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-)
+ZERO_ADDRESS = Web3.to_checksum_address("0x0000000000000000000000000000000000000000")
 
 
 FACTORY_ABI = [
@@ -73,44 +68,119 @@ POOL_ABI = [
 
 
 class BaseV3Pool:
+    """
+    Generic Uniswap V3 pool accessor.
+
+    This version no longer assumes only WETH/USDC.
+    """
+
     def __init__(self, provider, logger: logging.Logger, fee: int = 3000):
         self.provider = provider
         self.logger = logger
         self.w3 = provider.w3
-        self.fee = fee
+        self.default_fee = int(fee)
 
-        factory = self.w3.eth.contract(
+        self.factory = self.w3.eth.contract(
             address=UNISWAP_V3_FACTORY,
             abi=FACTORY_ABI,
         )
 
-        pool_address = factory.functions.getPool(
-            WETH,
-            USDC,
-            self.fee,
+        self._pool_cache: Dict[Tuple[str, str, int], Dict[str, Any]] = {}
+
+    def _pair_key(self, token_a: str, token_b: str, fee: int) -> Tuple[str, str, int]:
+        a = Web3.to_checksum_address(token_a)
+        b = Web3.to_checksum_address(token_b)
+        ordered = tuple(sorted([a, b]))
+        return ordered[0], ordered[1], int(fee)
+
+    def get_pool(self, token_a: str, token_b: str, fee: int | None = None) -> Dict[str, Any]:
+        fee = int(self.default_fee if fee is None else fee)
+        key = self._pair_key(token_a, token_b, fee)
+
+        if key in self._pool_cache:
+            return self._pool_cache[key]
+
+        token_a = Web3.to_checksum_address(token_a)
+        token_b = Web3.to_checksum_address(token_b)
+
+        pool_address = self.factory.functions.getPool(
+            token_a,
+            token_b,
+            fee,
         ).call()
 
-        if pool_address == "0x0000000000000000000000000000000000000000":
-            raise RuntimeError("Pool not found.")
+        if Web3.to_checksum_address(pool_address) == ZERO_ADDRESS:
+            raise RuntimeError(f"Pool not found for pair {token_a}/{token_b} fee={fee}")
 
-        self.pool_address = pool_address
-        self.pool = self.w3.eth.contract(
+        pool_contract = self.w3.eth.contract(
             address=pool_address,
             abi=POOL_ABI,
         )
 
-        self.logger.info(f"V3 Pool loaded: {self.pool_address}")
+        token0 = Web3.to_checksum_address(pool_contract.functions.token0().call())
+        token1 = Web3.to_checksum_address(pool_contract.functions.token1().call())
 
-    def get_price(self) -> float:
-        slot0 = self.pool.functions.slot0().call()
+        payload = {
+            "address": Web3.to_checksum_address(pool_address),
+            "contract": pool_contract,
+            "token0": token0,
+            "token1": token1,
+            "fee": fee,
+        }
+
+        self._pool_cache[key] = payload
+
+        self.logger.info(
+            "V3 Pool loaded: %s token0=%s token1=%s fee=%s",
+            payload["address"],
+            token0,
+            token1,
+            fee,
+        )
+
+        return payload
+
+    def get_price(
+        self,
+        token_base: str,
+        token_quote: str,
+        base_decimals: int,
+        quote_decimals: int,
+        fee: int | None = None,
+    ) -> float:
+        """
+        Returns quote-token per base-token spot price.
+        Example:
+            base=AAVE, quote=USDC -> USDC per AAVE
+        """
+        token_base = Web3.to_checksum_address(token_base)
+        token_quote = Web3.to_checksum_address(token_quote)
+
+        pool_info = self.get_pool(token_base, token_quote, fee)
+        pool = pool_info["contract"]
+
+        slot0 = pool.functions.slot0().call()
         sqrt_price_x96 = slot0[0]
 
-        price = (sqrt_price_x96 / (2 ** 96)) ** 2
+        raw_price = (sqrt_price_x96 / (2 ** 96)) ** 2
 
-        # Adjust for decimals (WETH 18, USDC 6)
-        adjusted_price = price * (10 ** 12)
+        token0 = pool_info["token0"]
+        token1 = pool_info["token1"]
 
-        return adjusted_price
+        decimal_adjustment = 10 ** (int(base_decimals) - int(quote_decimals))
 
-    def get_liquidity(self) -> int:
-        return self.pool.functions.liquidity().call()
+        if token0 == token_base and token1 == token_quote:
+            return raw_price * decimal_adjustment
+
+        if token0 == token_quote and token1 == token_base:
+            if raw_price <= 0:
+                raise RuntimeError("Invalid pool raw price (<= 0).")
+            return (1.0 / raw_price) * decimal_adjustment
+
+        raise RuntimeError(
+            f"Pool token mismatch for requested pair base={token_base} quote={token_quote}"
+        )
+
+    def get_liquidity(self, token_a: str, token_b: str, fee: int | None = None) -> int:
+        pool_info = self.get_pool(token_a, token_b, fee)
+        return int(pool_info["contract"].functions.liquidity().call())

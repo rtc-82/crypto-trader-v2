@@ -9,10 +9,6 @@ from engine.config.config import ENGINE_CONFIG
 from engine.config.symbols import SYMBOLS
 
 
-# -------------------------------------------------
-# CONFIG
-# -------------------------------------------------
-
 INITIAL_EQUITY = ENGINE_CONFIG.get("starting_equity", 1000.0)
 BINANCE_SYMBOLS = SYMBOLS
 BINANCE_INTERVAL = "1h"
@@ -21,28 +17,8 @@ MAX_DRAWDOWN = ENGINE_CONFIG.get("portfolio_circuit_breaker_dd", 0.20)
 
 
 async def main():
-    # -------------------------------------------------
-    # LOGGER
-    # -------------------------------------------------
-
     logger = setup_logger()
     logger.info("Starting Crypto Trader V2")
-
-    # -------------------------------------------------
-    # SOLANA SETUP (SAFE PAPER MODE)
-    # -------------------------------------------------
-
-    from engine.execution.solana.solana_executor import SolanaExecutor
-
-    solana_executor = SolanaExecutor(
-        wallet=None,
-        jupiter=None,
-        mode="paper",
-    )
-
-    # -------------------------------------------------
-    # BASE SETUP (SAFE PAPER MODE)
-    # -------------------------------------------------
 
     from engine.execution.base.base_executor import BaseExecutor
     from engine.execution.base.base_web3_provider import BaseWeb3Provider
@@ -58,33 +34,20 @@ async def main():
         provider=provider,
         quoter=quoter,
         logger=logger,
-        dry_run=True,  # prevents real swaps
+        dry_run=False,
     )
 
     base_executor = BaseExecutor(
         live_executor=base_live,
-        mode="paper",
+        mode="live",
     )
 
-    # -------------------------------------------------
-    # EXECUTOR MAP
-    # -------------------------------------------------
-
     executors = {
-        "solana": solana_executor,
         "base": base_executor,
     }
 
-    # -------------------------------------------------
-    # ORCHESTRATOR
-    # -------------------------------------------------
-
     logger.info(f"Trading symbols: {BINANCE_SYMBOLS}")
 
-    # Compatibility note:
-    # MultiChainOrchestrator still expects `symbol=...` in its constructor.
-    # The live engine is already scanning the configured basket, so we keep
-    # a placeholder symbol here instead of reworking constructor internals.
     orchestrator = MultiChainOrchestrator(
         executors=executors,
         symbol=BINANCE_SYMBOLS[0],
@@ -95,7 +58,6 @@ async def main():
     )
 
     logger.info("Engine initialized. Entering run loop.")
-
     await orchestrator.run()
 
 
