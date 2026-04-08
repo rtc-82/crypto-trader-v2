@@ -2,10 +2,10 @@ STRATEGY_CONFIG = {
     # Conservative V2 trend / breakout profile
     "ema_period": 100,
     "atr_period": 14,
-    "slope_threshold": 0.60,
-    "volatility_percentile_threshold": 0.80,
-    "adx_threshold": 32,
-    "breakout_lookback": 48,
+    "slope_threshold": 0.38,
+    "volatility_percentile_threshold": 0.65,
+    "adx_threshold": 24,
+    "breakout_lookback": 24,
 
     # Mean reversion effectively disabled for V2
     "bb_period": 40,
