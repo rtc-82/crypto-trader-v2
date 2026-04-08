@@ -3,7 +3,7 @@ STRATEGY_CONFIG = {
     "ema_period": 100,
     "atr_period": 14,
     "slope_threshold": 0.38,
-    "volatility_percentile_threshold": 0.65,
+    "volatility_percentile_threshold": 0.55,
     "adx_threshold": 24,
     "breakout_lookback": 24,
 
