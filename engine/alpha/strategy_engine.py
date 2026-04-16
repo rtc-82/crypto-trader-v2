@@ -158,8 +158,7 @@ class StrategyEngine:
         base_meta["breakout_distance"] = float(breakout_distance)
 
         if (
-            self.previous_slope <= self.slope_threshold
-            and slope > self.slope_threshold
+            slope > self.slope_threshold
             and price > prior_high_break
         ):
             self.previous_slope = slope
@@ -170,8 +169,7 @@ class StrategyEngine:
             )
 
         if (
-            self.previous_slope >= -self.slope_threshold
-            and slope < -self.slope_threshold
+            slope < -self.slope_threshold
             and price < prior_low_break
         ):
             self.previous_slope = slope

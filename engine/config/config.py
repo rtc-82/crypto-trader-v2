@@ -5,7 +5,7 @@ STRATEGY_CONFIG = {
     "slope_threshold": 0.38,
     "volatility_percentile_threshold": 0.55,
     "adx_threshold": 24,
-    "breakout_lookback": 24,
+    "breakout_lookback": 20,
 
     # Mean reversion effectively disabled for V2
     "bb_period": 40,
