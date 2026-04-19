@@ -186,16 +186,14 @@ class StrategyEngine:
 
         # LONG
         if (
-            self.previous_slope <= self.slope_threshold
-            and slope > self.slope_threshold
+            slope > self.slope_threshold
             and price > prior_high_break
         ):
             signal = Signal(direction="LONG", atr=float(self.current_atr))
 
         # SHORT
         elif (
-            self.previous_slope >= -self.slope_threshold
-            and slope < -self.slope_threshold
+            slope < -self.slope_threshold
             and price < prior_low_break
         ):
             signal = Signal(direction="SHORT", atr=float(self.current_atr))
