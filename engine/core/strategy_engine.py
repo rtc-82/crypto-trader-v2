@@ -1,8 +1,11 @@
 from collections import deque
 from typing import Optional
 import numpy as np
+import logging
 
 from engine.core.signal import Signal
+
+logger = logging.getLogger("trading_engine")
 
 
 class StrategyEngine:
@@ -90,8 +93,6 @@ class StrategyEngine:
         for x in snap.get("low_window", []):
             self.low_window.append(float(x))
 
-    # ==========================================================
-
     def generate_signal(
         self,
         price: float,
@@ -152,7 +153,6 @@ class StrategyEngine:
 
         self.current_atr = float(np.mean(self.tr_queue))
         self.atr_history.append(self.current_atr)
-
         self.prev_close = price
 
         # ==============================
@@ -178,6 +178,12 @@ class StrategyEngine:
             self.previous_slope = slope
             return None
 
+        price_minus_prior_high = price - prior_high_break
+        prior_low_minus_price = prior_low_break - price
+
+        long_break_ok = price > prior_high_break
+        short_break_ok = price < prior_low_break
+
         # ==============================
         # Breakout Logic
         # ==============================
@@ -197,6 +203,19 @@ class StrategyEngine:
             and price < prior_low_break
         ):
             signal = Signal(direction="SHORT", atr=float(self.current_atr))
+
+        if signal is None:
+            logger.info(
+                "[BREAKOUT DEBUG] "
+                f"price={price:.6f} "
+                f"prior_high_break={prior_high_break:.6f} "
+                f"prior_low_break={prior_low_break:.6f} "
+                f"slope={slope:.6f} "
+                f"long_break_ok={long_break_ok} "
+                f"short_break_ok={short_break_ok} "
+                f"price_minus_prior_high={price_minus_prior_high:.6f} "
+                f"prior_low_minus_price={prior_low_minus_price:.6f}"
+            )
 
         self.previous_slope = slope
         return signal
