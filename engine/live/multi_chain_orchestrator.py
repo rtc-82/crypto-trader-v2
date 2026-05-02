@@ -1247,12 +1247,17 @@ class MultiChainOrchestrator:
                 logger.info(
                     f"[RISK CHECK] symbol={symbol} equity={self.capital.equity:.6f} "
                     f"price={price:.6f} atr={float(atr):.6f} base_size={base_size:.6f} "
-                    f"proposed_notional={(base_size * price):.6f}"
+                    f"proposed_notional={(base_size * price):.6f} max_notional={max_notional:.6f}"
                 )
+
+                proposed_notional = base_size * price
+
+                if proposed_notional > max_notional:
+                    proposed_notional = max_notional
 
                 decision = self.global_risk.approve_trade(
                     equity=self.capital.equity,
-                    proposed_notional=base_size * price
+                    proposed_notional=proposed_notional
                 )
 
                 if not decision.allowed:
