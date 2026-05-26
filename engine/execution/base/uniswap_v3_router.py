@@ -19,7 +19,6 @@ ROUTER_ABI = [
                     {"internalType": "address", "name": "tokenOut", "type": "address"},
                     {"internalType": "uint24", "name": "fee", "type": "uint24"},
                     {"internalType": "address", "name": "recipient", "type": "address"},
-                    {"internalType": "uint256", "name": "deadline", "type": "uint256"},
                     {"internalType": "uint256", "name": "amountIn", "type": "uint256"},
                     {"internalType": "uint256", "name": "amountOutMinimum", "type": "uint256"},
                     {"internalType": "uint160", "name": "sqrtPriceLimitX96", "type": "uint160"},
@@ -63,14 +62,11 @@ class UniswapV3Router:
         fee: Optional[int] = None,
     ) -> dict:
         swap_fee = int(self.fee if fee is None else fee)
-        deadline = int(time.time()) + int(deadline_seconds)
-
         params = (
             Web3.to_checksum_address(token_in),
             Web3.to_checksum_address(token_out),
             swap_fee,
             Web3.to_checksum_address(recipient),
-            deadline,
             int(amount_in),
             int(min_out),
             0,

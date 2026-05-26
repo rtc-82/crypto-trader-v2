@@ -336,6 +336,17 @@ class BaseLiveExecutor:
         )
 
         amount_in_token_units = int(float(token_amount) * (10 ** int(asset_cfg["decimals"])))
+
+        current_token_balance = self._get_erc20_balance(asset_cfg["address"])
+        if current_token_balance < amount_in_token_units:
+            self.logger.warning(
+                "SELL amount capped to wallet balance: requested=%s current=%s",
+                amount_in_token_units,
+                current_token_balance,
+            )
+            amount_in_token_units = current_token_balance
+            token_amount = amount_in_token_units / (10 ** int(asset_cfg["decimals"]))
+
         expected_quote_out = self.quoter.quote_asset_to_quote(
             asset_symbol=asset_symbol,
             asset_amount=token_amount,

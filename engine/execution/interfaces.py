@@ -16,6 +16,7 @@ class ExecutionResult:
     status: Optional[str] = None
     error: Optional[str] = None
     raw: Any = None
+    raw_response: Any = None
 
 
 class LiveExecutorInterface(ABC):

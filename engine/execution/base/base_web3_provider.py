@@ -110,5 +110,14 @@ class BaseWeb3Provider:
 
     def send_raw_transaction(self, signed_tx):
         """Send signed transaction to network."""
-        tx_hash = self.w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        raw_tx = getattr(signed_tx, "raw_transaction", None)
+        if raw_tx is None:
+            raw_tx = getattr(signed_tx, "rawTransaction", None)
+        if raw_tx is None:
+            raise RuntimeError(
+                f"Signed transaction has no raw transaction field. "
+                f"Available fields: {dir(signed_tx)}"
+            )
+
+        tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
         return tx_hash.hex()

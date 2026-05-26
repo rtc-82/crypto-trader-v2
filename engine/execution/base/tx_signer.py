@@ -4,10 +4,6 @@ import logging
 
 
 class TxSigner:
-    """
-    Signs and (optionally) broadcasts transactions using BaseWeb3Provider.
-    """
-
     def __init__(self, provider, logger: logging.Logger):
         self.provider = provider
         self.logger = logger
@@ -18,6 +14,22 @@ class TxSigner:
         return signed
 
     def send(self, signed_tx) -> str:
-        tx_hash = self.provider.send_raw_transaction(signed_tx)
+        try:
+            tx_hash = self.provider.send_raw_transaction(signed_tx)
+        except Exception as e:
+            self.logger.exception(f"Transaction broadcast failed: {e}")
+            raise
+
         self.logger.info(f"Transaction broadcasted: {tx_hash}")
+        return tx_hash
+
+    def sign_and_send(self, tx: dict, label: str = "TX") -> str:
+        signed_tx = self.sign(tx)
+        try:
+            tx_hash = self.provider.send_raw_transaction(signed_tx)
+        except Exception as e:
+            self.logger.exception(f"{label} broadcast failed: {e}")
+            raise
+
+        self.logger.info(f"{label} broadcast: {tx_hash}")
         return tx_hash
